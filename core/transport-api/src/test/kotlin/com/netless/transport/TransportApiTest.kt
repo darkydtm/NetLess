@@ -105,7 +105,7 @@ class TransportApiTest {
 		assertTrue(discoveryStopped)
 		assertEquals(listOf(discoveredNode), discoveredNodes)
 		assertEquals(advertisement, advertisedAdvertisement)
-		assert(data.type == TransportType.Bluetooth)
+		assertEquals(TransportType.Bluetooth, data.type)
 		assertEquals(listOf(TransportState.Connecting, TransportState.Connected, TransportState.Closed), observedStates)
 		assertEquals(endpoint, connectedEndpoint)
 		assertContentEquals(incomingPacket, receivedPackets.single())

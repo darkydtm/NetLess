@@ -30,6 +30,13 @@ class Route(
 		require(nodeValues.distinct().size == nodeValues.size) { "Route must not contain cycles" }
 	}
 
+	fun copy(nodes: List<NodeId> = this.nodes, metrics: RouteMetrics = this.metrics): Route =
+		Route(nodes, metrics)
+
+	operator fun component1(): List<NodeId> = nodes
+
+	operator fun component2(): RouteMetrics = metrics
+
 	override fun equals(other: Any?): Boolean =
 		other is Route && nodes == other.nodes && metrics == other.metrics
 

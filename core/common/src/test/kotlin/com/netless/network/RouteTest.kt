@@ -28,4 +28,28 @@ class RouteTest {
 		assertEquals(listOf(NodeId("a"), NodeId("b")), route.nodes)
 	}
 
+	@Test
+	fun copyPreservesValueSemanticsAndSnapshotsNodes() {
+		val metrics = RouteMetrics(1.0, 1.0, 1.0, 1.0)
+		val copiedNodes = mutableListOf(NodeId("c"))
+		val route = Route(listOf(NodeId("a"), NodeId("b")), metrics)
+		val copy = route.copy(nodes = copiedNodes)
+
+		copiedNodes[0] = NodeId("changed")
+
+		assertEquals(route, route.copy())
+		assertEquals(listOf(NodeId("c")), copy.nodes)
+		assertEquals(metrics, copy.metrics)
+	}
+
+	@Test
+	fun supportsDestructuring() {
+		val metrics = RouteMetrics(1.0, 1.0, 1.0, 1.0)
+		val route = Route(listOf(NodeId("a"), NodeId("b")), metrics)
+		val (nodes, destructuredMetrics) = route
+
+		assertEquals(route.nodes, nodes)
+		assertEquals(route.metrics, destructuredMetrics)
+	}
+
 }
