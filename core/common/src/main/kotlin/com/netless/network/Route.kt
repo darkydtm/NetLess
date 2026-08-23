@@ -2,6 +2,7 @@ package com.netless.network
 
 import com.netless.common.NodeId
 import java.io.Serializable
+import java.util.Collections
 
 data class RouteMetrics(
 	val bandwidth: Double,
@@ -17,12 +18,22 @@ data class RouteMetrics(
 	}
 }
 
-data class Route(
-	val nodes: List<NodeId>,
+class Route(
+	nodes: List<NodeId>,
 	val metrics: RouteMetrics,
 ) : Serializable {
+	private val nodeValues = nodes.toMutableList()
+	val nodes: List<NodeId> = Collections.unmodifiableList(nodeValues)
+
 	init {
-		require(nodes.isNotEmpty()) { "Route must contain at least one node" }
-		require(nodes.distinct().size == nodes.size) { "Route must not contain cycles" }
+		require(nodeValues.isNotEmpty()) { "Route must contain at least one node" }
+		require(nodeValues.distinct().size == nodeValues.size) { "Route must not contain cycles" }
 	}
+
+	override fun equals(other: Any?): Boolean =
+		other is Route && nodes == other.nodes && metrics == other.metrics
+
+	override fun hashCode(): Int = 31 * nodes.hashCode() + metrics.hashCode()
+
+	override fun toString(): String = "Route(nodes=$nodes, metrics=$metrics)"
 }

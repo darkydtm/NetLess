@@ -47,6 +47,18 @@ class ProtocolContractsTest {
 	}
 
 	@Test
+	fun rejectsMalformedNextHopBoolean() {
+		val codec = BinaryPacketCodec()
+		val bytes = codec.encode(packet)
+		val nextHopFlagOffset = 8 +
+			4 + packet.forwarding.packetId.value.toByteArray().size +
+			4 + packet.forwarding.finalNodeId.value.toByteArray().size
+		bytes[nextHopFlagOffset] = 2
+
+		assertFailsWith<IllegalArgumentException> { codec.decode(bytes) }
+	}
+
+	@Test
 	fun preservesEveryTrafficClass() {
 		val codec = BinaryPacketCodec()
 

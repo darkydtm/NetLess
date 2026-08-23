@@ -96,7 +96,11 @@ class BinaryPacketCodec : PacketCodec {
 	private fun readForwarding(input: DataInputStream): ForwardingEnvelope {
 		val packetId = com.netless.common.PacketId(readString(input))
 		val finalNodeId = com.netless.common.NodeId(readString(input))
-		val nextHop = if (input.readBoolean()) com.netless.common.NodeId(readString(input)) else null
+		val nextHop = when (val flag = input.readUnsignedByte()) {
+			0 -> null
+			1 -> com.netless.common.NodeId(readString(input))
+			else -> throw IllegalArgumentException("Invalid next-hop flag: $flag")
+		}
 		val hopCount = input.readInt()
 		val ttl = input.readLong()
 		val trafficClass = enumValue(input.readInt(), com.netless.common.TrafficClass.entries, "traffic class")
