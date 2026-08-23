@@ -6,8 +6,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mesh_cli import Network, Node, Packet, Policy, RelayStore
 
 
-def packet(packet_id="p1", ttl=8, max_hops=2, destination="C"):
-	return Packet(packet_id, "A", destination, b"hello", ttl, max_hops)
+def packet(packet_id="p1", ttl=8, max_hops=2, destination="C", payload=b"hello"):
+	return Packet(packet_id, "A", destination, payload, ttl, max_hops)
 
 
 def test_direct_delivery():
@@ -73,6 +73,27 @@ def test_unavailable_destination_is_relayed():
 	assert "p1" in network.nodes["C"].delivered_packets
 
 
+def test_failed_relay_flush_keeps_packet_for_retry():
+	network = Network([Node("A"), Node("B"), Node("C", available=False)])
+	network.connect("A", "B")
+	network.connect("B", "C")
+
+	assert network.send(packet(), Policy()) == "relayed"
+	stored = network.nodes["B"].relay_store.get("p1")
+	assert stored.path == ("A", "B")
+	assert stored.ttl == 7
+	network.disconnect("B", "C")
+	network.disconnect("A", "B")
+	network.nodes["C"].available = True
+	network.flush_relays()
+	assert network.nodes["B"].relay_store.get("p1") is not None
+
+	network.connect("B", "C")
+	network.flush_relays()
+	assert network.nodes["B"].relay_store.get("p1") is None
+	assert "p1" in network.nodes["C"].delivered_packets
+
+
 def test_relay_quota_prunes_oldest_packets():
 	store = RelayStore(quota=5)
 	store.enqueue(Packet("one", "A", "C", b"1234", 8, 2))
@@ -80,6 +101,28 @@ def test_relay_quota_prunes_oldest_packets():
 
 	assert store.get("one") is None
 	assert store.get("two") is not None
+
+
+def test_policy_relay_quota_prunes_storage():
+	network = Network([Node("A"), Node("B"), Node("C", available=False)])
+	network.connect("A", "B")
+	network.connect("B", "C")
+	policy = Policy(relay_quota=5)
+
+	assert network.send(packet("one", payload=b"1234"), policy) == "relayed"
+	assert network.send(packet("two", payload=b"5678"), policy) == "relayed"
+	assert network.nodes["B"].relay_store.get("one") is None
+	assert network.nodes["B"].relay_store.get("two") is not None
+
+
+def test_policy_ttl_bounds_packet_lifetime():
+	network = Network([Node("A"), Node("B"), Node("C")])
+	network.connect("A", "B")
+	network.connect("B", "C")
+
+	assert network.send(packet("short-policy", ttl=8), Policy(ttl=1)) == "expired"
+	assert network.send(packet("short-packet", ttl=1), Policy(ttl=8)) == "expired"
+	assert network.send(packet("short-explicit", ttl=2), Policy(ttl=8)) == "delivered"
 
 
 def test_speed_policy_prefers_direct_route():
@@ -96,9 +139,20 @@ def test_coverage_policy_accepts_mesh_route():
 	network = Network([Node("A"), Node("B"), Node("C")])
 	network.connect("A", "B")
 	network.connect("B", "C")
+	network.connect("A", "C")
 
 	assert network.send(packet(), Policy(mode="coverage")) == "delivered"
 	assert network.last_route == ("A", "B", "C")
+
+
+def test_available_direct_route_beats_unavailable_mesh_route():
+	network = Network([Node("A"), Node("B", available=False), Node("C")])
+	network.connect("A", "B")
+	network.connect("B", "C")
+	network.connect("A", "C")
+
+	assert network.send(packet(), Policy(mode="speed")) == "delivered"
+	assert network.last_route == ("A", "C")
 
 
 def test_cli_module_imports():

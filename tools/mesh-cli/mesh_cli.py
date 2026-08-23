@@ -30,9 +30,9 @@ class RelayStore:
 		self.quota = quota
 		self._packets = {}
 
-	def enqueue(self, packet):
+	def enqueue(self, packet, policy=None):
 		self._packets.setdefault(packet.packet_id, packet)
-		self.prune()
+		self.prune(policy)
 
 	def remove(self, packet_id):
 		return self._packets.pop(packet_id, None)
@@ -41,7 +41,9 @@ class RelayStore:
 		return self._packets.get(packet_id)
 
 	def prune(self, policy=None):
-		quota = self.quota if policy is None else policy.relay_quota
+		if policy is not None:
+			self.quota = policy.relay_quota
+		quota = self.quota
 		while sum(len(packet.payload) for packet in self._packets.values()) > quota:
 			self._packets.pop(next(iter(self._packets)))
 
@@ -77,31 +79,42 @@ class Network:
 	def send(self, packet, policy):
 		if packet.source not in self.nodes or packet.destination not in self.nodes:
 			return "unavailable"
+		start = packet.path[-1] if packet.path else packet.source
+		if start not in self.nodes or not self.nodes[start].available:
+			return "unavailable"
 		if any(packet.packet_id in node.delivered_packets for node in self.nodes.values()):
 			return "duplicate"
-		if packet.ttl <= 0:
+		effective_ttl = min(packet.ttl, policy.ttl)
+		if effective_ttl <= 0:
 			return "expired"
 		if len(set(packet.path)) != len(packet.path):
 			return "cycle"
 
-		hop_limit = min(packet.max_hops, policy.max_hops)
-		route = self._route(packet.source, packet.destination, hop_limit, policy.mode)
+		hop_limit = min(packet.max_hops, policy.max_hops) - max(0, len(packet.path) - 1)
+		route = self._route(start, packet.destination, hop_limit, policy.mode, packet.path[:-1])
 		if route is None:
-			return "max_hops" if self._route(packet.source, packet.destination, None, policy.mode) else "unavailable"
+			return "max_hops" if self._route(start, packet.destination, None, policy.mode, packet.path[:-1]) else "unavailable"
 		self.last_route = route
-		current_packet = packet
+		base_path = packet.path or (packet.source,)
+		current_packet = Packet(packet.packet_id, packet.source, packet.destination, packet.payload, effective_ttl, packet.max_hops, base_path)
 		for index, node_id in enumerate(route):
 			node = self.nodes[node_id]
 			if not node.available:
 				if policy.relay_enabled and index > 0:
-					self.nodes[route[index - 1]].relay_store.enqueue(current_packet)
+					self.nodes[route[index - 1]].relay_store.enqueue(current_packet, policy)
 					return "relayed"
 				return "unavailable"
 			node.seen_packets.add(current_packet.packet_id)
 			if index == len(route) - 1:
 				node.delivered_packets.add(current_packet.packet_id)
 				return "delivered"
-			if current_packet.ttl <= 1:
+			next_node = self.nodes[route[index + 1]]
+			if not next_node.available:
+				if policy.relay_enabled:
+					node.relay_store.enqueue(current_packet, policy)
+					return "relayed"
+				return "unavailable"
+			if current_packet.ttl <= 1 and route[index + 1] != packet.destination:
 				return "expired"
 			current_packet = Packet(
 				current_packet.packet_id,
@@ -110,18 +123,20 @@ class Network:
 				current_packet.payload,
 				current_packet.ttl - 1,
 				current_packet.max_hops,
-				tuple(route[: index + 1]),
+				base_path + tuple(route[1 : index + 2]),
 			)
 		return "unavailable"
 
 	def flush_relays(self):
 		for node in self.nodes.values():
 			for packet in node.relay_store.packets():
-				if self.nodes[packet.destination].available:
+				if packet.destination not in self.nodes or not self.nodes[packet.destination].available:
+					continue
+				result = self.send(packet, Policy(max_hops=packet.max_hops, ttl=packet.ttl, relay_quota=node.relay_store.quota))
+				if result in ("delivered", "duplicate", "expired"):
 					node.relay_store.remove(packet.packet_id)
-					self.send(packet, Policy(max_hops=packet.max_hops))
 
-	def _route(self, source, destination, max_hops, mode):
+	def _route(self, source, destination, max_hops, mode, blocked=()):
 		if source == destination:
 			return (source,)
 		queue = deque([(source, (source,))])
@@ -132,7 +147,7 @@ class Network:
 				routes.append(path)
 				continue
 			for neighbor in sorted(self.nodes[node_id].neighbors):
-				if neighbor in path or (max_hops is not None and len(path) - 1 >= max_hops):
+				if neighbor in path or neighbor in blocked or (neighbor != destination and not self.nodes[neighbor].available) or (max_hops is not None and len(path) - 1 >= max_hops):
 					continue
 				queue.append((neighbor, path + (neighbor,)))
 		if not routes:
