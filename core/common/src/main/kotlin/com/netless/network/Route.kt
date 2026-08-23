@@ -21,6 +21,7 @@ data class RouteMetrics(
 class Route(
 	nodes: List<NodeId>,
 	val metrics: RouteMetrics,
+	val expiresAtMillis: Long = Long.MAX_VALUE,
 ) : Serializable {
 	private val nodeValues = nodes.toMutableList()
 	val nodes: List<NodeId> = Collections.unmodifiableList(nodeValues)
@@ -28,19 +29,26 @@ class Route(
 	init {
 		require(nodeValues.isNotEmpty()) { "Route must contain at least one node" }
 		require(nodeValues.distinct().size == nodeValues.size) { "Route must not contain cycles" }
+		require(expiresAtMillis >= 0L) { "expiresAtMillis must be non-negative" }
 	}
 
 	fun copy(nodes: List<NodeId> = this.nodes, metrics: RouteMetrics = this.metrics): Route =
-		Route(nodes, metrics)
+		Route(nodes, metrics, expiresAtMillis)
+
+	fun copy(
+		nodes: List<NodeId> = this.nodes,
+		metrics: RouteMetrics = this.metrics,
+		expiresAtMillis: Long,
+	): Route = Route(nodes, metrics, expiresAtMillis)
 
 	operator fun component1(): List<NodeId> = nodes
 
 	operator fun component2(): RouteMetrics = metrics
 
 	override fun equals(other: Any?): Boolean =
-		other is Route && nodes == other.nodes && metrics == other.metrics
+		other is Route && nodes == other.nodes && metrics == other.metrics && expiresAtMillis == other.expiresAtMillis
 
-	override fun hashCode(): Int = 31 * nodes.hashCode() + metrics.hashCode()
+	override fun hashCode(): Int = 31 * (31 * nodes.hashCode() + metrics.hashCode()) + expiresAtMillis.hashCode()
 
-	override fun toString(): String = "Route(nodes=$nodes, metrics=$metrics)"
+	override fun toString(): String = "Route(nodes=$nodes, metrics=$metrics, expiresAtMillis=$expiresAtMillis)"
 }

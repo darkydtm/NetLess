@@ -71,6 +71,20 @@ class RouteSelectorTest {
 	}
 
 	@Test
+	fun positivelyAvailableRoutesWithExpiredTimestampsAreIgnored() {
+		val deterministicSelector = RouteSelector { 1_000L }
+		val expired = route(
+			"A",
+			"B",
+			metrics = RouteMetrics(bandwidth = 100.0, latency = 1.0, energyCost = 1.0, availability = 1.0),
+			expiresAtMillis = 1_000L,
+		)
+		val available = route("A", "C", expiresAtMillis = 1_001L)
+
+		assertEquals(available, deterministicSelector.select(listOf(expired, available), TransferPolicy(mode = TransferMode.Speed)))
+	}
+
+	@Test
 	fun returnsNullWhenEveryRouteIsExpired() {
 		val expired = route(
 			"A",
@@ -97,6 +111,21 @@ class RouteSelectorTest {
 		assertNull(selector.select(listOf(mesh), TransferPolicy(maxHops = 1)))
 	}
 
-	private fun route(vararg nodeValues: String, metrics: RouteMetrics = RouteMetrics(1.0, 1.0, 1.0, 1.0)): Route =
-		Route(nodeValues.map(::NodeId), metrics)
+	@Test
+	fun coverageRejectsRoutesBeyondMaxHops() {
+		val overLimit = route("A", "B", "C")
+
+		assertNull(
+			selector.select(
+				listOf(overLimit),
+				TransferPolicy(mode = TransferMode.Coverage, maxHops = 1),
+			),
+		)
+	}
+
+	private fun route(
+		vararg nodeValues: String,
+		metrics: RouteMetrics = RouteMetrics(1.0, 1.0, 1.0, 1.0),
+		expiresAtMillis: Long = Long.MAX_VALUE,
+	): Route = Route(nodeValues.map(::NodeId), metrics, expiresAtMillis)
 }

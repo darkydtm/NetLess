@@ -4,6 +4,8 @@ import com.netless.common.NodeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class RouteTest {
 	@Test
@@ -40,6 +42,22 @@ class RouteTest {
 		assertEquals(route, route.copy())
 		assertEquals(listOf(NodeId("c")), copy.nodes)
 		assertEquals(metrics, copy.metrics)
+	}
+
+	@Test
+	fun expiryParticipatesInValueSemanticsAndCopy() {
+		val metrics = RouteMetrics(1.0, 1.0, 1.0, 1.0)
+		val route = Route(listOf(NodeId("a"), NodeId("b")), metrics, expiresAtMillis = 100L)
+		val copy = route.copy(expiresAtMillis = 200L)
+
+		assertEquals(Long.MAX_VALUE, Route(listOf(NodeId("a")), metrics).expiresAtMillis)
+		assertEquals(route, route.copy())
+		assertEquals(200L, copy.expiresAtMillis)
+		assertTrue(route.toString().contains("expiresAtMillis=100"))
+		assertFailsWith<IllegalArgumentException> {
+			Route(listOf(NodeId("a")), metrics, expiresAtMillis = -1L)
+		}
+		assertNotEquals(route, copy)
 	}
 
 	@Test

@@ -3,11 +3,19 @@ package com.netless.network
 import com.netless.common.TransferMode
 import com.netless.common.TransferPolicy
 
-class RouteSelector {
+private const val BANDWIDTH_WEIGHT = 0.35
+private const val LATENCY_WEIGHT = 0.25
+private const val ENERGY_COST_WEIGHT = 0.15
+private const val AVAILABILITY_WEIGHT = 0.20
+private const val HOP_PENALTY_WEIGHT = 0.05
+
+class RouteSelector(private val clock: () -> Long = { System.currentTimeMillis() }) {
 	fun select(routes: List<Route>, policy: TransferPolicy): Route? {
+		val now = clock()
 		val candidates = routes.filter { route ->
 			route.nodes.size - 1 <= policy.maxHops &&
-			route.metrics.availability > 0.0
+			route.metrics.availability > 0.0 &&
+			route.expiresAtMillis > now
 		}
 
 		return candidates.minWithOrNull(comparator(policy.mode))
@@ -47,11 +55,11 @@ class RouteSelector {
 
 	private fun balancedScore(route: Route): Double {
 		val metrics = route.metrics
-		return 0.35 * increasing(metrics.bandwidth) +
-			0.25 * decreasing(metrics.latency) +
-			0.15 * decreasing(metrics.energyCost) +
-			0.20 * metrics.availability +
-			0.05 * decreasing(hops(route).toDouble())
+		return BANDWIDTH_WEIGHT * increasing(metrics.bandwidth) +
+			LATENCY_WEIGHT * decreasing(metrics.latency) +
+			ENERGY_COST_WEIGHT * decreasing(metrics.energyCost) +
+			AVAILABILITY_WEIGHT * metrics.availability +
+			HOP_PENALTY_WEIGHT * decreasing(hops(route).toDouble())
 	}
 
 	private fun increasing(value: Double): Double = value / (1.0 + value)

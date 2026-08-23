@@ -12,3 +12,5 @@ python -m pytest tools/mesh-cli/test_mesh_cli.py -q
 ```
 
 The Python code remains an external smoke-test, not a second shared routing implementation. Kotlin unit tests belong to `core/common` and cover deterministic route selection, metrics, expiry filtering, cycles, and configurable hop limits.
+
+Balanced selection uses fixed normalized weights: bandwidth `0.35`, latency `0.25`, energy cost `0.15`, availability `0.20`, and hop penalty `0.05`. These constants keep selection deterministic across callers.
