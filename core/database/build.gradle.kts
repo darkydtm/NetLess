@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-	namespace = "com.netless.crypto"
+	namespace = "com.netless.database"
 	compileSdk = 35
 }
 
