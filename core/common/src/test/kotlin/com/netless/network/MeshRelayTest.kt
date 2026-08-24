@@ -15,7 +15,8 @@ class MeshRelayTest {
 
 		assertEquals(RelayDecision.Relayed, node.handle(packet, TransferPolicy()))
 		assertEquals(RelayDecision.Duplicate, node.handle(packet, TransferPolicy()))
-		assertEquals(packet, node.relayed.single())
+		assertEquals(packet.packetId, node.relayed.single().packetId)
+		assertEquals(2, node.relayed.single().ttl)
 	}
 
 	@Test
