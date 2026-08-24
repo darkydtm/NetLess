@@ -14,8 +14,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProfileViewModelTest {
@@ -64,14 +64,16 @@ class ProfileViewModelTest {
 	}
 
 	@Test
-	fun saveRethrowsCancellation() = runTest {
+	fun saveCancellationDoesNotExposeAnError() = runTest {
 		val repository = FakeIdentityRepository(updateError = CancellationException("cancelled"))
 		val viewModel = ProfileViewModel(repository)
 		viewModel.nameChanged("Ada")
 
 		viewModel.save()
+		advanceUntilIdle()
 
-		assertFailsWith<CancellationException> { advanceUntilIdle() }
+		assertFalse(viewModel.uiState.value.saving)
+		assertNull(viewModel.uiState.value.error)
 	}
 
 	@Test
