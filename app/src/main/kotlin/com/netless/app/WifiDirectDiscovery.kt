@@ -20,12 +20,12 @@ import kotlinx.coroutines.flow.callbackFlow
 @SuppressLint("MissingPermission")
 class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTransport {
 	private val manager = context.getSystemService(WifiP2pManager::class.java)
-	private val channel = manager?.initialize(context, context.mainLooper, null)
+	private val wifiChannel = manager?.initialize(context, context.mainLooper, null)
 	private var receiver: BroadcastReceiver? = null
 
 	override suspend fun startDiscovery() = callbackFlow {
 		val wifiManager = manager ?: error("Wi-Fi Direct unavailable")
-		val wifiChannel = channel ?: error("Wi-Fi Direct channel unavailable")
+		val channel = wifiChannel ?: error("Wi-Fi Direct channel unavailable")
 		val callback = object : WifiP2pManager.PeerListListener {
 			override fun onPeersAvailable(list: WifiP2pDeviceList) {
 				list.deviceList.forEach { device -> trySend(device.toDiscoveredNode()) }
@@ -34,7 +34,7 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 		val registered = object : BroadcastReceiver() {
 			override fun onReceive(context: Context, intent: Intent) {
 				if (intent.action == WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION) {
-					wifiManager.requestPeers(wifiChannel, callback)
+					wifiManager.requestPeers(channel, callback)
 				}
 			}
 		}
@@ -53,7 +53,7 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 	override suspend fun stopDiscovery() {
 		val wifiManager = manager ?: return
 		val wifiChannel = channel ?: return
-		wifiManager.stopPeerDiscovery(wifiChannel, null)
+		wifiManager.stopPeerDiscovery(wifiChannel ?: return, null)
 		receiver?.let { context.unregisterReceiver(it) }
 		receiver = null
 	}

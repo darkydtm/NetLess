@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -24,7 +25,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	val state by viewModel.uiState.collectAsStateWithLifecycle()
-	val contacts by container.contacts.contacts.collectAsStateWithLifecycle()
+	val contacts by container.contacts.contacts.collectAsState()
 	LaunchedEffect(container) {
 		container.discoveryTransport.startDiscovery().collectLatest(container.contacts::upsert)
 	}

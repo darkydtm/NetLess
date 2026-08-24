@@ -24,8 +24,8 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.channels.awaitClose
@@ -60,7 +60,7 @@ object BleAdvertisementCodec {
 class ContactStore {
 	private val contactsByNode = LinkedHashMap<NodeId, DiscoveredNode>()
 	private val _contacts = MutableStateFlow<List<DiscoveredNode>>(emptyList())
-	val contacts: Flow<List<DiscoveredNode>> = _contacts.asStateFlow()
+	val contacts: StateFlow<List<DiscoveredNode>> = _contacts.asStateFlow()
 
 	@Synchronized
 	fun upsert(node: DiscoveredNode) {
