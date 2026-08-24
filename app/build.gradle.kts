@@ -15,7 +15,7 @@ dependencies {
 	implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:${libs.versions.lifecycle.get()}")
 	implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
 	testImplementation(kotlin("test"))
-	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm:1.9.0")
 }
 
 android {

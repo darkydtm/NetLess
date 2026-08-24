@@ -121,7 +121,7 @@ class ProfileViewModelTest {
 	}
 }
 
-private class MainDispatcherRule : TestWatcher() {
+class MainDispatcherRule : TestWatcher() {
 	override fun starting(description: Description) {
 		Dispatchers.setMain(UnconfinedTestDispatcher())
 	}
