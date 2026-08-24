@@ -36,5 +36,9 @@ private class RecordingKeyWrapper : KeyWrapper {
 
 	override fun unwrap(wrappedKey: ByteArray): ByteArray = wrappedKey.reversedArray()
 
-	fun original(key: WrappedDatabaseKey): ByteArray = originals[key.wrappedKey.toList()] ?: error("missing key")
+	fun original(key: WrappedDatabaseKey): ByteArray = original(key.wrappedKey)
+
+	fun original(key: WrappedFileKey): ByteArray = original(key.wrappedKey)
+
+	private fun original(wrappedKey: ByteArray): ByteArray = originals[wrappedKey.toList()] ?: error("missing key")
 }

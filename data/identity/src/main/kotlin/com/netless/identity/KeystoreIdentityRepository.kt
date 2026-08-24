@@ -36,10 +36,9 @@ class KeystoreIdentityRepository internal constructor(
 	override suspend fun getOrCreateIdentity(): DeviceIdentity {
 		return lock.withLock {
 			val identity = loadIdentity()
-			val profile = store.profile ?: createSignedProfile(identity, "New device", "", 0).also {
-				store.profile = it
-			}
+			val profile = store.profile ?: createSignedProfile(identity, "New device", "", 0)
 			validateProfile(identity, profile)
+			if (store.profile == null) store.profile = profile
 			profileState.value = profile
 			DeviceIdentity(identity.profileId, identity.publicKey)
 		}
@@ -50,10 +49,9 @@ class KeystoreIdentityRepository internal constructor(
 	override suspend fun updateProfile(command: UpdateProfileCommand): Profile {
 		return lock.withLock {
 			val identity = loadIdentity()
-			val current = store.profile ?: createSignedProfile(identity, "New device", "", 0).also {
-				store.profile = it
-			}
+			val current = store.profile ?: createSignedProfile(identity, "New device", "", 0)
 			validateProfile(identity, current)
+			if (store.profile == null) store.profile = current
 			val profile = createSignedProfile(identity, command.name, command.bio, current.version + 1)
 			validateProfile(identity, profile)
 			store.profile = profile
@@ -134,8 +132,9 @@ private class AndroidKeystoreCryptoProvider : CryptoProvider {
 		}
 	}
 
-	override fun hasPrivateKey(privateKey: PrivateKeyRef): Boolean =
+	override fun hasPrivateKey(privateKey: PrivateKeyRef): Boolean = runCatching {
 		keyStore().containsAlias(privateKey.alias) && keyStore().getKey(privateKey.alias, null) is PrivateKey
+	}.getOrDefault(false)
 
 	override suspend fun verify(publicKey: PublicKey, data: ByteArray, signature: Signature): Boolean =
 		try {

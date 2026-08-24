@@ -49,12 +49,13 @@ class IdentityRepositoryTest {
 		val store = FakeIdentityStore()
 		val repository = KeystoreIdentityRepository(FakeCryptoProvider(acceptSignatures = false), store)
 
-		repository.getOrCreateIdentity()
+		assertFailsWith<SecurityException> { repository.getOrCreateIdentity() }
+		assertEquals(null, store.profile)
 
 		assertFailsWith<SecurityException> {
 			repository.updateProfile(UpdateProfileCommand(name = "Ada"))
 		}
-		assertEquals(0, store.profile?.version)
+		assertEquals(null, store.profile)
 	}
 
 	@Test
@@ -113,7 +114,8 @@ class IdentityRepositoryTest {
 
 	@Test
 	fun serializesConcurrentProfileUpdates() = runBlocking {
-		val repository = KeystoreIdentityRepository(FakeCryptoProvider(), FakeIdentityStore())
+		val store = FakeIdentityStore()
+		val repository = KeystoreIdentityRepository(FakeCryptoProvider(), store)
 		repository.getOrCreateIdentity()
 
 		val profiles = coroutineScope {
@@ -122,6 +124,8 @@ class IdentityRepositoryTest {
 
 		assertEquals((1..20).toSet(), profiles.map { it.version }.toSet())
 		assertEquals(20, profiles.maxOf { it.version })
+		assertEquals(20, store.profile?.version)
+		assertEquals(profiles.single { it.version == 20L }, store.profile)
 	}
 
 	@Test
