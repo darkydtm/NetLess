@@ -7,7 +7,10 @@ import com.netless.crypto.Signature
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.Socket
+import java.security.SecureRandom
+import javax.crypto.Cipher
 import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -15,6 +18,7 @@ class SessionTransport(private val socket: Socket) {
 	private val input = DataInputStream(socket.getInputStream())
 	private val output = DataOutputStream(socket.getOutputStream())
 	private var negotiatedKey: SecretKey? = null
+	private var authenticatedSessionId: String? = null
 
 	suspend fun establish(protocolVersion: Int, sessionId: String) {
 		require(protocolVersion > 0 && sessionId.isNotBlank()) { "invalid session parameters" }
@@ -47,6 +51,7 @@ class SessionTransport(private val socket: Socket) {
 		}
 		return local.derive(remote.ephemeralPublicKey, EphemeralKeyExchange.transcript(local.publicKey, remote.ephemeralPublicKey, sessionId)).also {
 			negotiatedKey = it
+			authenticatedSessionId = sessionId
 		}
 	}
 
@@ -57,17 +62,37 @@ class SessionTransport(private val socket: Socket) {
 		while (!socket.isClosed) {
 			val size = input.readInt()
 			require(size in 0..MAX_PACKET_SIZE) { "packet exceeds session limit" }
-			emit(input.readNBytes(size))
+			emit(decrypt(input.readNBytes(size)))
 		}
 	}
 
 	suspend fun send(packet: ByteArray) {
 		require(packet.size <= MAX_PACKET_SIZE) { "packet exceeds session limit" }
+		val encrypted = encrypt(packet)
 		synchronized(output) {
-			output.writeInt(packet.size)
-			output.write(packet)
+			output.writeInt(encrypted.size)
+			output.write(encrypted)
 			output.flush()
 		}
+	}
+
+	private fun encrypt(packet: ByteArray): ByteArray {
+		val key = negotiatedKey ?: error("session is not authenticated")
+		val iv = ByteArray(GCM_IV_SIZE).also(SecureRandom()::nextBytes)
+		val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+		cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+		cipher.updateAAD(authenticatedSessionId!!.encodeToByteArray())
+		return iv + cipher.doFinal(packet)
+	}
+
+	private fun decrypt(packet: ByteArray): ByteArray {
+		require(packet.size > GCM_IV_SIZE + GCM_TAG_SIZE) { "encrypted packet is too short" }
+		val key = negotiatedKey ?: error("session is not authenticated")
+		val iv = packet.copyOfRange(0, GCM_IV_SIZE)
+		val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+		cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+		cipher.updateAAD(authenticatedSessionId!!.encodeToByteArray())
+		return cipher.doFinal(packet.copyOfRange(GCM_IV_SIZE, packet.size))
 	}
 
 	private fun writeOffer(protocolVersion: Int, offer: KeyExchangeOffer) {
@@ -109,6 +134,8 @@ class SessionTransport(private val socket: Socket) {
 	private companion object {
 		const val MAX_PACKET_SIZE = 4 * 1024 * 1024
 		const val MAX_HANDSHAKE_FIELD_SIZE = 16 * 1024
+		const val GCM_IV_SIZE = 12
+		const val GCM_TAG_SIZE = 16
 	}
 }
 
