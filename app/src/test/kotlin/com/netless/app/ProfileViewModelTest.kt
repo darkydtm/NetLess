@@ -13,6 +13,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ProfileViewModelTest {
 	@Test
@@ -28,11 +30,22 @@ class ProfileViewModelTest {
 		assertEquals("Ada", viewModel.uiState.value.profile?.name)
 	}
 
-	private class FakeIdentityRepository : IdentityRepository {
+	@Test
+	fun initializationFailureStopsLoadingAndExposesError() = runTest {
+		val repository = FakeIdentityRepository(identityError = IllegalStateException("identity unavailable"))
+		val viewModel = ProfileViewModel(repository)
+		advanceUntilIdle()
+
+		assertFalse(viewModel.uiState.value.loading)
+		assertTrue(viewModel.uiState.value.error!!.contains("identity unavailable"))
+	}
+
+	private class FakeIdentityRepository(private val identityError: Throwable? = null) : IdentityRepository {
 		private val profile = MutableStateFlow(profile("New device", ""))
 		var lastCommand: UpdateProfileCommand? = null
 
-		override suspend fun getOrCreateIdentity() = DeviceIdentity(profile.value.id, profile.value.publicKey)
+		override suspend fun getOrCreateIdentity() = identityError?.let { throw it }
+			?: DeviceIdentity(profile.value.id, profile.value.publicKey)
 		override fun observeProfile(): Flow<Profile> = profile
 		override suspend fun updateProfile(command: UpdateProfileCommand): Profile {
 			lastCommand = command

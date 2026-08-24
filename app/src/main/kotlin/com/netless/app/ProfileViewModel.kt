@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.netless.identity.IdentityRepository
 import com.netless.identity.Profile
 import com.netless.identity.UpdateProfileCommand
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,9 +28,16 @@ class ProfileViewModel(private val repository: IdentityRepository) : ViewModel()
 
 	init {
 		viewModelScope.launch {
-			repository.getOrCreateIdentity()
-			repository.observeProfile().collect { profile ->
-				_uiState.update { it.copy(loading = false, profile = profile, name = profile.name, bio = profile.bio) }
+			runCatching {
+				repository.getOrCreateIdentity()
+				repository.observeProfile().collect { profile ->
+					_uiState.update { it.copy(loading = false, profile = profile, name = profile.name, bio = profile.bio) }
+				}
+			}.onFailure { error ->
+				if (error is CancellationException) {
+					throw error
+				}
+				_uiState.update { it.copy(loading = false, error = error.message ?: "Could not load profile") }
 			}
 		}
 	}
@@ -40,7 +48,10 @@ class ProfileViewModel(private val repository: IdentityRepository) : ViewModel()
 
 	fun save() {
 		val state = uiState.value
-		if (state.name.isBlank() || state.saving) {
+		if (state.saving) {
+			return
+		}
+		if (state.name.isBlank()) {
 			_uiState.update { it.copy(error = "Name is required") }
 			return
 		}
