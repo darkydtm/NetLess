@@ -30,3 +30,37 @@ class EncryptedContentStore(private val cipher: ContentCipher) {
 	@Synchronized
 	fun get(id: String): ByteArray? = records[id]?.let(cipher::decrypt)
 }
+
+class DurableEncryptedContentStore(
+	private val file: java.io.File,
+	private val cipher: ContentCipher,
+) {
+	private val records = LinkedHashMap<String, ByteArray>()
+
+	init { load() }
+
+	@Synchronized
+	fun put(id: String, content: ByteArray) {
+		require(id.isNotBlank()) { "id must not be blank" }
+		records[id] = cipher.encrypt(content)
+		persist()
+	}
+
+	@Synchronized
+	fun get(id: String): ByteArray? = records[id]?.let(cipher::decrypt)
+
+	private fun load() {
+		if (!file.isFile) return
+		file.readLines().forEach { line ->
+			val separator = line.indexOf(':')
+			if (separator > 0) records[line.substring(0, separator)] = java.util.Base64.getDecoder().decode(line.substring(separator + 1))
+		}
+	}
+
+	private fun persist() {
+		file.parentFile?.mkdirs()
+		val temporary = java.io.File(file.parentFile, "${file.name}.tmp")
+		temporary.printWriter().use { output -> records.forEach { (id, value) -> output.println("$id:${java.util.Base64.getEncoder().encodeToString(value)}") } }
+		if (!temporary.renameTo(file)) error("Could not persist encrypted content")
+	}
+}

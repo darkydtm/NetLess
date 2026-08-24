@@ -6,6 +6,7 @@ import com.netless.identity.KeystoreIdentityRepository
 import com.netless.transport.DiscoveryTransport
 import com.netless.content.AesContentCipher
 import com.netless.content.EncryptedContentStore
+import com.netless.content.DurableEncryptedContentStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,7 +26,7 @@ class AppContainer(application: Application) {
 	val contacts = ContactStore()
 	val discoveryTransport: DiscoveryTransport = AndroidBleDiscoveryTransport(application)
 	val wifiDirectDiscovery: DiscoveryTransport = WifiDirectDiscoveryTransport(application)
-	val contentStore = EncryptedContentStore(AesContentCipher())
+	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
