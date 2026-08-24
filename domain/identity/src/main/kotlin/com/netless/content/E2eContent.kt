@@ -17,6 +17,8 @@ class E2eContentCipher(secret: ByteArray) {
 	private val authenticationKey = SecretKeySpec(sha256(secret, "authentication"), "HmacSHA256")
 	private val cipher = AesContentCipher(encryptionKey)
 
+	constructor(key: javax.crypto.SecretKey) : this(key.encoded)
+
 	fun encrypt(keyId: String, associatedData: ByteArray, plaintext: ByteArray): EncryptedContent {
 		require(keyId.isNotBlank()) { "keyId must not be blank" }
 		val ciphertext = cipher.encrypt(plaintext)
