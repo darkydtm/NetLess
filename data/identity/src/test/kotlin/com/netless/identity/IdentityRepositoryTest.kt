@@ -122,7 +122,7 @@ class IdentityRepositoryTest {
 			(1..20).map { index -> async { repository.updateProfile(UpdateProfileCommand("Name $index")) } }.awaitAll()
 		}
 
-		assertEquals((1..20).toSet(), profiles.map { it.version }.toSet())
+		assertEquals((1L..20L).toSet(), profiles.map { it.version }.toSet())
 		assertEquals(20, profiles.maxOf { it.version })
 		assertEquals(20, store.profile?.version)
 		assertEquals(profiles.single { it.version == 20L }, store.profile)
