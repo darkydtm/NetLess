@@ -4,6 +4,7 @@ interface CryptoProvider {
 	suspend fun generateIdentity(): IdentityKeyPair
 	suspend fun sign(privateKey: PrivateKeyRef, data: ByteArray): Signature
 	suspend fun verify(publicKey: PublicKey, data: ByteArray, signature: Signature): Boolean
+	fun hasPrivateKey(privateKey: PrivateKeyRef): Boolean
 	fun sha256(data: ByteArray): Hash
 }
 

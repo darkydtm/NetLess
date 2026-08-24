@@ -18,6 +18,15 @@ class DatabaseKeyStoreTest {
 		assertEquals(32, store.unwrap(first).size)
 		assertTrue(store.unwrap(first).contentEquals(wrapper.original(first)))
 	}
+
+	@Test
+	fun fileKeysRoundTripThroughTheWrapper() {
+		val wrapper = RecordingKeyWrapper()
+		val store = FileKeyStore(wrapper)
+		val key = store.createWrappedKey()
+
+		assertTrue(store.unwrap(key).contentEquals(wrapper.original(key)))
+	}
 }
 
 private class RecordingKeyWrapper : KeyWrapper {

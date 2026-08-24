@@ -30,6 +30,26 @@ class WrappedDatabaseKey(
 	override fun hashCode(): Int = 31 * keyId.hashCode() + wrappedKeyValue.contentHashCode()
 }
 
+class WrappedFileKey(
+	val keyId: String,
+	wrappedKey: ByteArray,
+) {
+	private val wrappedKeyValue = wrappedKey.copyOf()
+
+	val wrappedKey: ByteArray
+		get() = wrappedKeyValue.copyOf()
+
+	init {
+		require(keyId.isNotBlank()) { "keyId must not be blank" }
+		require(wrappedKeyValue.isNotEmpty()) { "wrappedKey must not be empty" }
+	}
+
+	override fun equals(other: Any?): Boolean =
+		other is WrappedFileKey && keyId == other.keyId && wrappedKeyValue.contentEquals(other.wrappedKeyValue)
+
+	override fun hashCode(): Int = 31 * keyId.hashCode() + wrappedKeyValue.contentHashCode()
+}
+
 interface KeyWrapper {
 	fun wrap(key: ByteArray): ByteArray
 	fun unwrap(wrappedKey: ByteArray): ByteArray
@@ -42,6 +62,15 @@ class DatabaseKeyStore(private val keyWrapper: KeyWrapper = AndroidKeystoreKeyWr
 	}
 
 	fun unwrap(key: WrappedDatabaseKey): ByteArray = keyWrapper.unwrap(key.wrappedKey)
+}
+
+class FileKeyStore(private val keyWrapper: KeyWrapper = AndroidKeystoreKeyWrapper("netless-file-key-wrapper")) {
+	fun createWrappedKey(): WrappedFileKey {
+		val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
+		return WrappedFileKey(UUID.randomUUID().toString(), keyWrapper.wrap(key))
+	}
+
+	fun unwrap(key: WrappedFileKey): ByteArray = keyWrapper.unwrap(key.wrappedKey)
 }
 
 class AndroidKeystoreKeyWrapper(private val alias: String = "netless-database-key-wrapper") : KeyWrapper {

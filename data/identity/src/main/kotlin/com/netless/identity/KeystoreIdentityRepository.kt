@@ -21,43 +21,72 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class KeystoreIdentityRepository internal constructor(
 	private val crypto: CryptoProvider,
 	private val store: IdentityStore,
 ) : IdentityRepository {
-	private val profileState = MutableStateFlow(store.profile)
+	private val profileState = MutableStateFlow<Profile?>(null)
+	private val lock = Mutex()
 
 	constructor(context: Context) : this(AndroidKeystoreCryptoProvider(), AndroidIdentityStore(context))
 
 	override suspend fun getOrCreateIdentity(): DeviceIdentity {
-		val identity = store.identity ?: crypto.generateIdentity().let { keyPair ->
+		return lock.withLock {
+			val identity = loadIdentity()
+			val profile = store.profile ?: createSignedProfile(identity, "New device", "", 0).also {
+				store.profile = it
+			}
+			validateProfile(identity, profile)
+			profileState.value = profile
+			DeviceIdentity(identity.profileId, identity.publicKey)
+		}
+	}
+
+	override fun observeProfile(): Flow<Profile> = profileState.filterNotNull()
+
+	override suspend fun updateProfile(command: UpdateProfileCommand): Profile {
+		return lock.withLock {
+			val identity = loadIdentity()
+			val current = store.profile ?: createSignedProfile(identity, "New device", "", 0).also {
+				store.profile = it
+			}
+			validateProfile(identity, current)
+			val profile = createSignedProfile(identity, command.name, command.bio, current.version + 1)
+			validateProfile(identity, profile)
+			store.profile = profile
+			profileState.value = profile
+			profile
+		}
+	}
+
+	private suspend fun loadIdentity(): StoredIdentity {
+		val stored = store.identity ?: crypto.generateIdentity().let { keyPair ->
 			StoredIdentity(
 				profileId = ProfileId(crypto.sha256(keyPair.publicKey.encoded).hex),
 				publicKey = keyPair.publicKey,
 				privateKey = keyPair.privateKey,
 			).also { store.identity = it }
 		}
-		if (store.profile == null) {
-			store.profile = createSignedProfile(identity, "New device", "", 0)
-			profileState.value = store.profile
+		if (!crypto.hasPrivateKey(stored.privateKey)) {
+			throw IllegalStateException("Missing identity key ${stored.privateKey.alias}")
 		}
-		return DeviceIdentity(identity.profileId, identity.publicKey)
+		val profileId = ProfileId(crypto.sha256(stored.publicKey.encoded).hex)
+		if (stored.profileId != profileId) {
+			return stored.copy(profileId = profileId).also { store.identity = it }
+		}
+		return stored
 	}
 
-	override fun observeProfile(): Flow<Profile> = profileState.filterNotNull()
-
-	override suspend fun updateProfile(command: UpdateProfileCommand): Profile {
-		getOrCreateIdentity()
-		val identity = store.identity ?: error("identity was not created")
-		val current = store.profile ?: error("profile was not created")
-		val profile = createSignedProfile(identity, command.name, command.bio, current.version + 1)
+	private suspend fun validateProfile(identity: StoredIdentity, profile: Profile) {
+		if (profile.id != identity.profileId || profile.publicKey != identity.publicKey) {
+			throw SecurityException("Persisted profile identity does not match device identity")
+		}
 		if (!crypto.verify(profile.publicKey, profile.signedPayload(), profile.signature)) {
 			throw SecurityException("Profile signature verification failed")
 		}
-		store.profile = profile
-		profileState.value = profile
-		return profile
 	}
 
 	private suspend fun createSignedProfile(
@@ -77,6 +106,7 @@ class KeystoreIdentityRepository internal constructor(
 		)
 	}
 }
+
 
 private class AndroidKeystoreCryptoProvider : CryptoProvider {
 	override suspend fun generateIdentity(): IdentityKeyPair {
@@ -103,6 +133,9 @@ private class AndroidKeystoreCryptoProvider : CryptoProvider {
 			Signature(sign())
 		}
 	}
+
+	override fun hasPrivateKey(privateKey: PrivateKeyRef): Boolean =
+		keyStore().containsAlias(privateKey.alias) && keyStore().getKey(privateKey.alias, null) is PrivateKey
 
 	override suspend fun verify(publicKey: PublicKey, data: ByteArray, signature: Signature): Boolean =
 		try {
@@ -154,7 +187,7 @@ internal class AndroidIdentityStore(context: Context) : IdentityStore {
 					putString("public-key", Base64.encodeToString(value.publicKey.encoded, Base64.NO_WRAP))
 					putString("profile-id", value.profileId.value)
 				}
-			}.apply()
+			}.commit().also { if (!it) throw IllegalStateException("Failed to persist identity") }
 		}
 
 	override var profile: Profile?
@@ -187,6 +220,6 @@ internal class AndroidIdentityStore(context: Context) : IdentityStore {
 					putLong("profile-version", value.version)
 					putString("profile-signature", Base64.encodeToString(value.signature.bytes, Base64.NO_WRAP))
 				}
-			}.apply()
+			}.commit().also { if (!it) throw IllegalStateException("Failed to persist profile") }
 		}
 }
