@@ -17,3 +17,16 @@ class ContentStore {
 	val groups: List<Group>
 		get() = synchronized(this) { groupMap.values.toList() }
 }
+
+class EncryptedContentStore(private val cipher: ContentCipher) {
+	private val records = LinkedHashMap<String, ByteArray>()
+
+	@Synchronized
+	fun put(id: String, content: ByteArray) {
+		require(id.isNotBlank()) { "id must not be blank" }
+		records[id] = cipher.encrypt(content)
+	}
+
+	@Synchronized
+	fun get(id: String): ByteArray? = records[id]?.let(cipher::decrypt)
+}

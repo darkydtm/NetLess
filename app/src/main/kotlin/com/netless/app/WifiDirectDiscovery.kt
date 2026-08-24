@@ -1,0 +1,68 @@
+package com.netless.app
+
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pDeviceList
+import android.net.wifi.p2p.WifiP2pManager
+import com.netless.common.NodeId
+import com.netless.transport.DiscoveredNode
+import com.netless.transport.DiscoveryAdvertisement
+import com.netless.transport.DiscoveryTransport
+import com.netless.transport.TransportCapabilities
+import com.netless.transport.TransportEndpoint
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.callbackFlow
+
+@SuppressLint("MissingPermission")
+class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTransport {
+	private val manager = context.getSystemService(WifiP2pManager::class.java)
+	private val channel = manager?.initialize(context, context.mainLooper, null)
+	private var receiver: BroadcastReceiver? = null
+
+	override suspend fun startDiscovery() = callbackFlow {
+		val wifiManager = manager ?: error("Wi-Fi Direct unavailable")
+		val wifiChannel = channel ?: error("Wi-Fi Direct channel unavailable")
+		val callback = object : WifiP2pManager.PeerListListener {
+			override fun onPeersAvailable(list: WifiP2pDeviceList) {
+				list.deviceList.forEach { device -> trySend(device.toDiscoveredNode()) }
+			}
+		}
+		val registered = object : BroadcastReceiver() {
+			override fun onReceive(context: Context, intent: Intent) {
+				if (intent.action == WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION) {
+					wifiManager.requestPeers(wifiChannel, callback)
+				}
+			}
+		}
+		receiver = registered
+		context.registerReceiver(registered, IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION))
+		wifiManager.discoverPeers(wifiChannel, object : WifiP2pManager.ActionListener {
+			override fun onSuccess() = Unit
+			override fun onFailure(reason: Int) { close(IllegalStateException("Wi-Fi Direct discovery failed: $reason")) }
+		})
+		awaitClose {
+			context.unregisterReceiver(registered)
+			if (receiver === registered) receiver = null
+		}
+	}
+
+	override suspend fun stopDiscovery() {
+		val wifiManager = manager ?: return
+		val wifiChannel = channel ?: return
+		wifiManager.stopPeerDiscovery(wifiChannel, null)
+		receiver?.let { context.unregisterReceiver(it) }
+		receiver = null
+	}
+
+	override suspend fun advertise(advertisement: DiscoveryAdvertisement) = Unit
+
+	private fun WifiP2pDevice.toDiscoveredNode() = DiscoveredNode(
+		NodeId(deviceAddress),
+		TransportEndpoint(NodeId(deviceAddress), deviceAddress, mapOf("deviceName" to deviceName)),
+		TransportCapabilities(false, true, 1, true, true),
+	)
+}

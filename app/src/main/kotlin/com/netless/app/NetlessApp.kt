@@ -17,19 +17,27 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
+import com.netless.transport.DiscoveredNode
+import kotlinx.coroutines.flow.collectLatest
 
 @Composable
-fun NetlessApp(viewModel: ProfileViewModel) {
+fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	val state by viewModel.uiState.collectAsStateWithLifecycle()
+	val contacts by container.contacts.contacts.collectAsStateWithLifecycle()
+	LaunchedEffect(container) {
+		container.discoveryTransport.startDiscovery().collectLatest(container.contacts::upsert)
+	}
 	when {
 		state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading profile" })
-		else -> ProfileScreen(state, viewModel::nameChanged, viewModel::bioChanged, viewModel::save)
+		else -> ProfileScreen(state, contacts, viewModel::nameChanged, viewModel::bioChanged, viewModel::save)
 	}
 }
 
 @Composable
 private fun ProfileScreen(
 	state: ProfileUiState,
+	contacts: List<DiscoveredNode>,
 	onNameChanged: (String) -> Unit,
 	onBioChanged: (String) -> Unit,
 	onSave: () -> Unit,
@@ -58,6 +66,8 @@ private fun ProfileScreen(
 			minLines = 3,
 		)
 		state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+		Text("Nearby contacts: ${contacts.size}")
+		contacts.forEach { Text(it.endpoint.address, style = MaterialTheme.typography.bodyMedium) }
 		Button(onClick = onSave, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
 			Text(if (state.saving) "Saving..." else "Save profile")
 		}
