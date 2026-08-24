@@ -1,36 +1,36 @@
 name: CI
 
 on:
-	push:
-	pull_request:
+  push:
+  pull_request:
 
 permissions:
-	contents: read
+  contents: read
 
 jobs:
-	python:
-		runs-on: ubuntu-latest
-		steps:
-			- uses: actions/checkout@v4
-			- uses: actions/setup-python@v5
-				with:
-					python-version: "3.x"
-			- run: python -m pip install pytest
-			- run: python tools/mesh-cli/mesh_cli.py self-test
-			- run: python -m pytest tools/mesh-cli/test_mesh_cli.py -q
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest
+      - run: python tools/mesh-cli/mesh_cli.py self-test
+      - run: python -m pytest tools/mesh-cli/test_mesh_cli.py -q
 
-	android:
-		runs-on: ubuntu-latest
-		steps:
-			- uses: actions/checkout@v4
-			- uses: actions/setup-java@v4
-				with:
-					distribution: temurin
-					java-version: "17"
-			- uses: android-actions/setup-android@v3
-			- run: yes | sdkmanager --licenses >/dev/null
-			- run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-			- uses: gradle/actions/setup-gradle@v4
-				with:
-					gradle-version: "8.9"
-			- run: gradle --no-daemon --stacktrace assembleDebug test
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - run: gradle --no-daemon --stacktrace assembleDebug test
