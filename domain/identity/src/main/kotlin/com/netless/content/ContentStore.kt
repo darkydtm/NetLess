@@ -14,5 +14,6 @@ class ContentStore {
 	@Synchronized fun putFile(file: FileAttachment) { fileMap[file.id] = file }
 	@Synchronized fun messages(conversationId: String): List<Message> = messageMap.values.filter { it.conversationId == conversationId }
 	@Synchronized fun files(conversationId: String): List<FileAttachment> = fileMap.values.filter { it.conversationId == conversationId }
-	@Synchronized val groups: List<Group> get() = groupMap.values.toList()
+	val groups: List<Group>
+		get() = synchronized(this) { groupMap.values.toList() }
 }
