@@ -20,14 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import com.netless.transport.DiscoveredNode
-import kotlinx.coroutines.flow.collectLatest
 
 @Composable
 fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	val state by viewModel.uiState.collectAsStateWithLifecycle()
 	val contacts by container.contacts.contacts.collectAsState()
 	LaunchedEffect(container) {
-		container.discoveryTransport.startDiscovery().collectLatest(container.contacts::upsert)
+		container.runtimeController.startDiscovery()
 	}
 	when {
 		state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading profile" })

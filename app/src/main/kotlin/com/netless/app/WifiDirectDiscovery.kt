@@ -52,8 +52,8 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 
 	override suspend fun stopDiscovery() {
 		val wifiManager = manager ?: return
-		val wifiChannel = channel ?: return
-		wifiManager.stopPeerDiscovery(wifiChannel ?: return, null)
+		val channel = wifiChannel ?: return
+		wifiManager.stopPeerDiscovery(channel, null)
 		receiver?.let { context.unregisterReceiver(it) }
 		receiver = null
 	}
