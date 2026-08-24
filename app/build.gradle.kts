@@ -7,6 +7,7 @@ plugins {
 dependencies {
 	implementation(project(":domain:identity"))
 	implementation(project(":data:identity"))
+	implementation(project(":core:transport-api"))
 	implementation(platform("androidx.compose:compose-bom:${libs.versions.compose.bom.get()}"))
 	implementation("androidx.activity:activity-compose:${libs.versions.activity.compose.get()}")
 	implementation("androidx.compose.ui:ui")
