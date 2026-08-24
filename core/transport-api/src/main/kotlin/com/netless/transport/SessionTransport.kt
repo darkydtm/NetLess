@@ -1,14 +1,20 @@
 package com.netless.transport
 
+import com.netless.crypto.EphemeralKeyExchange
+import com.netless.crypto.KeyExchangeOffer
+import com.netless.crypto.PublicKey
+import com.netless.crypto.Signature
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.Socket
+import javax.crypto.SecretKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 class SessionTransport(private val socket: Socket) {
 	private val input = DataInputStream(socket.getInputStream())
 	private val output = DataOutputStream(socket.getOutputStream())
+	private var negotiatedKey: SecretKey? = null
 
 	suspend fun establish(protocolVersion: Int, sessionId: String) {
 		require(protocolVersion > 0 && sessionId.isNotBlank()) { "invalid session parameters" }
@@ -18,6 +24,34 @@ class SessionTransport(private val socket: Socket) {
 			output.flush()
 		}
 	}
+
+	suspend fun establishAuthenticated(
+		protocolVersion: Int,
+		sessionId: String,
+		identityPublicKey: PublicKey,
+		sign: suspend (ByteArray) -> Signature,
+		verify: suspend (PublicKey, ByteArray, Signature) -> Boolean,
+	): SecretKey {
+		require(protocolVersion > 0 && sessionId.isNotBlank()) { "invalid session parameters" }
+		val local = EphemeralKeyExchange.generate()
+		val offer = KeyExchangeOffer(
+			sessionId = sessionId,
+			ephemeralPublicKey = local.publicKey,
+			identityPublicKey = identityPublicKey,
+			signature = sign(exchangePayload(sessionId, local.publicKey, identityPublicKey)),
+		)
+		writeOffer(protocolVersion, offer)
+		val remote = readOffer(protocolVersion, sessionId)
+		require(verify(remote.identityPublicKey, exchangePayload(remote.sessionId, remote.ephemeralPublicKey, remote.identityPublicKey), remote.signature)) {
+			throw SecurityException("session identity signature failed")
+		}
+		return local.derive(remote.ephemeralPublicKey, EphemeralKeyExchange.transcript(local.publicKey, remote.ephemeralPublicKey, sessionId)).also {
+			negotiatedKey = it
+		}
+	}
+
+	val sessionKey: SecretKey
+		get() = negotiatedKey ?: error("session is not authenticated")
 
 	fun packets(): Flow<ByteArray> = flow {
 		while (!socket.isClosed) {
@@ -36,5 +70,49 @@ class SessionTransport(private val socket: Socket) {
 		}
 	}
 
-	private companion object { const val MAX_PACKET_SIZE = 4 * 1024 * 1024 }
+	private fun writeOffer(protocolVersion: Int, offer: KeyExchangeOffer) {
+		synchronized(output) {
+			output.writeInt(protocolVersion)
+			output.writeUTF(offer.sessionId)
+			writeBytes(offer.ephemeralPublicKey)
+			writeBytes(offer.identityPublicKey.encoded)
+			writeBytes(offer.signature.bytes)
+			output.flush()
+		}
+	}
+
+	private fun readOffer(protocolVersion: Int, sessionId: String): KeyExchangeOffer {
+		require(input.readInt() == protocolVersion) { "session protocol mismatch" }
+		require(input.readUTF() == sessionId) { "session id mismatch" }
+		return KeyExchangeOffer(
+			sessionId,
+			readBytes(),
+			PublicKey(readBytes()),
+			Signature(readBytes()),
+		)
+	}
+
+	private fun writeBytes(value: ByteArray) {
+		output.writeInt(value.size)
+		output.write(value)
+	}
+
+	private fun readBytes(): ByteArray {
+		val size = input.readInt()
+		require(size in 1..MAX_HANDSHAKE_FIELD_SIZE) { "invalid handshake field" }
+		return input.readNBytes(size).also { require(it.size == size) { "truncated handshake" } }
+	}
+
+	private fun exchangePayload(sessionId: String, ephemeral: ByteArray, identity: PublicKey): ByteArray =
+		AuthenticatedKeyExchangePayload.create(sessionId, ephemeral, identity)
+
+	private companion object {
+		const val MAX_PACKET_SIZE = 4 * 1024 * 1024
+		const val MAX_HANDSHAKE_FIELD_SIZE = 16 * 1024
+	}
+}
+
+private object AuthenticatedKeyExchangePayload {
+	fun create(sessionId: String, ephemeral: ByteArray, identity: PublicKey): ByteArray =
+		java.security.MessageDigest.getInstance("SHA-256").digest(sessionId.encodeToByteArray() + ephemeral + identity.encoded)
 }
