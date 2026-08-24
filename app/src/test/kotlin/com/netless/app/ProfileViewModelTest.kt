@@ -7,11 +7,18 @@ import com.netless.identity.DeviceIdentity
 import com.netless.identity.IdentityRepository
 import com.netless.identity.Profile
 import com.netless.identity.UpdateProfileCommand
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.resetMain
+import kotlinx.coroutines.setMain
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.CancellationException
+import org.junit.Rule
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,6 +26,9 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ProfileViewModelTest {
+	@get:Rule
+	val mainDispatcherRule = MainDispatcherRule()
+
 	@Test
 	fun saveTrimsAndPersistsEditedProfile() = runTest {
 		val repository = FakeIdentityRepository()
@@ -108,5 +118,15 @@ class ProfileViewModelTest {
 			id = ProfileId("profile"), publicKey = PublicKey(byteArrayOf(1)), name = name,
 			bio = bio, version = if (name == "New device") 0 else 1, signature = Signature(byteArrayOf(1)),
 		)
+	}
+}
+
+private class MainDispatcherRule : TestWatcher() {
+	override fun starting(description: Description) {
+		Dispatchers.setMain(UnconfinedTestDispatcher())
+	}
+
+	override fun finished(description: Description) {
+		Dispatchers.resetMain()
 	}
 }
