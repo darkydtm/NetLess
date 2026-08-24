@@ -8,11 +8,12 @@ import android.media.MediaRecorder
 
 class AudioRuntime {
 	private val sampleRate = 16_000
-	private val bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+	private var bufferSize = 0
 	private var recorder: AudioRecord? = null
 	private var track: AudioTrack? = null
 
 	fun start() {
+		bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 		if (bufferSize <= 0) error("Audio input unavailable")
 		recorder = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
 		track = AudioTrack.Builder()
