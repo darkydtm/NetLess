@@ -14,8 +14,8 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Rule
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
@@ -123,7 +123,7 @@ class ProfileViewModelTest {
 
 class MainDispatcherRule : TestWatcher() {
 	override fun starting(description: Description) {
-		Dispatchers.setMain(UnconfinedTestDispatcher())
+		Dispatchers.setMain(StandardTestDispatcher())
 	}
 
 	override fun finished(description: Description) {
