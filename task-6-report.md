@@ -9,11 +9,12 @@ Changes:
 - Added accessible onboarding/profile editing for name and bio with validation, save state and error feedback.
 - Added focused ViewModel coverage for profile initialization failure. Gradle tests were not run because repository policy forbids local Android/Gradle builds.
 - Serialized concurrent profile saves and preserved cancellation propagation while exposing ordinary save failures as UI errors.
-- Added focused coverage for duplicate saves and cancellation propagation.
+- Added focused coverage for duplicate saves, ordinary save failure recovery and cancellation propagation.
 
 Verification:
 - `git diff --check`: passed.
 - `rg -n "saveInProgress|CancellationException|rapidSavesPersistOnlyOnce|saveRethrowsCancellation" app/src/main/kotlin/com/netless/app/ProfileViewModel.kt app/src/test/kotlin/com/netless/app/ProfileViewModelTest.kt`: matched atomic save reservation, cancellation handling and regression tests.
+- Focused ordinary save failure test added; Gradle tests were not run by instruction.
 - Python CLI discovery: no tests discovered by the requested discovery command; no Python test result is claimed.
 - Android build and Gradle tests: not run by instruction.
 

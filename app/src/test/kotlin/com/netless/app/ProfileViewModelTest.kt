@@ -46,6 +46,24 @@ class ProfileViewModelTest {
 	}
 
 	@Test
+	fun ordinarySaveFailureExposesErrorStopsSavingAndAllowsRetry() = runTest {
+		val repository = FakeIdentityRepository(updateError = IllegalStateException("save unavailable"))
+		val viewModel = ProfileViewModel(repository)
+		viewModel.nameChanged("Ada")
+
+		viewModel.save()
+		advanceUntilIdle()
+
+		assertEquals("save unavailable", viewModel.uiState.value.error)
+		assertFalse(viewModel.uiState.value.saving)
+
+		viewModel.save()
+		advanceUntilIdle()
+
+		assertEquals(2, repository.updateCount)
+	}
+
+	@Test
 	fun saveRethrowsCancellation() = runTest {
 		val repository = FakeIdentityRepository(updateError = CancellationException("cancelled"))
 		val viewModel = ProfileViewModel(repository)
