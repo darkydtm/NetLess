@@ -11,6 +11,7 @@ class AudioRuntime {
 	private var bufferSize = 0
 	private var recorder: AudioRecord? = null
 	private var track: AudioTrack? = null
+	private var sequence = 0L
 
 	fun start() {
 		bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -32,5 +33,19 @@ class AudioRuntime {
 		track?.stop()
 		track?.release()
 		track = null
+	}
+
+	fun captureFrame(): com.netless.transport.AudioPacket? {
+		val source = recorder ?: return null
+		val pcm = ShortArray(bufferSize / 2)
+		val count = source.read(pcm, 0, pcm.size)
+		if (count <= 0) return null
+		val bytes = java.nio.ByteBuffer.allocate(count * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+		pcm.take(count).forEach(bytes::putShort)
+		return com.netless.transport.AudioPacket(sequence++, System.currentTimeMillis(), bytes.array())
+	}
+
+	fun playFrame(packet: com.netless.transport.AudioPacket) {
+		track?.write(packet.pcm, 0, packet.pcm.size)
 	}
 }
