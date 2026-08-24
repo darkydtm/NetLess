@@ -56,6 +56,7 @@ class IdentityRepositoryTest {
 			repository.updateProfile(UpdateProfileCommand(name = "Ada"))
 		}
 		assertEquals(null, store.profile)
+		Unit
 	}
 
 	@Test
@@ -79,6 +80,7 @@ class IdentityRepositoryTest {
 		val repository = KeystoreIdentityRepository(crypto, store)
 
 		assertFailsWith<SecurityException> { repository.getOrCreateIdentity() }
+		Unit
 	}
 
 	@Test
@@ -110,6 +112,7 @@ class IdentityRepositoryTest {
 		val repository = KeystoreIdentityRepository(crypto, store)
 
 		assertFailsWith<IllegalStateException> { repository.getOrCreateIdentity() }
+		Unit
 	}
 
 	@Test
