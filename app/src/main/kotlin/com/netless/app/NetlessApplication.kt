@@ -47,7 +47,8 @@ class AppContainer(application: Application) {
 		javax.crypto.spec.SecretKeySpec(databaseKeyStore.unprotect(wrapped), "AES")
 	}
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher(storageKey))
-	private val contentCipher = ConversationContentCipher(ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }.also { it.register("conversation", storageKey) })
+	private val conversationKeys = ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }
+	private val contentCipher = ConversationContentCipher(conversationKeys)
 	lateinit var conversations: ConversationRepository
 	lateinit var meshRuntime: MeshRuntime
 	init {
@@ -79,8 +80,7 @@ class AppContainer(application: Application) {
 				val conversationId = message.conversationId
 				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
 				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
-				val sealed = contentStore.seal(payload.encode())
-				val envelope = com.netless.protocol.ContentEnvelope(UUID.randomUUID().toString(), localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), sealed, identityRepository.sign(sealed).bytes)
+				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), byteArrayOf(0))
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
@@ -115,6 +115,8 @@ class AppContainer(application: Application) {
 	)
 
 	fun routeDetails(): List<String> = listOf("This device") + contacts.contacts.value.map { it.nodeId.value }
+
+	fun provisionConversationKey(sessionId: String, key: javax.crypto.SecretKey) = conversationKeys.register(sessionId, key)
 }
 
 private fun com.netless.transport.WifiDirectDataTransport.asAdapter(identity: com.netless.crypto.PublicKey, sign: suspend (ByteArray) -> com.netless.crypto.Signature, verify: suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean) = object : com.netless.transport.TransportAdapter {

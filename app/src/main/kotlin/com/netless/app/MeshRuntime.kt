@@ -60,7 +60,7 @@ class MeshRuntime(
 		val currentNode = firstHop ?: localNode
 		val nextHop = selected.hops.getOrNull(1)?.nextNodeId ?: destination.takeUnless { it == currentNode }
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0), currentNode), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
-		val signature = signPacket(canonical(unsigned, now))
+		val signature = signPacket(originCanonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
 		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(signed, now))
@@ -75,7 +75,7 @@ class MeshRuntime(
 			codec.decode(bytes, now).also {
 				require(it.forwarding.currentNodeId == localNode) { "packet is not addressed to this node" }
 				require(validIntegrity(it, bytes, now)) { "packet integrity check failed" }
-				require(verifySenderSignature(it, canonical(it, now))) { "packet signature check failed" }
+				require(verifySenderSignature(it, originCanonical(it, now))) { "packet signature check failed" }
 			}
 		} catch (error: Exception) {
 			val packetId = runCatching { codec.decode(bytes, now).forwarding.packetId }.getOrNull()
@@ -212,6 +212,11 @@ class MeshRuntime(
 
 	private fun canonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
 		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+		content = packet.content.copy(senderSignature = byteArrayOf(0)),
+	), now)
+
+	private fun originCanonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
+		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(0)),
 		content = packet.content.copy(senderSignature = byteArrayOf(0)),
 	), now)
 

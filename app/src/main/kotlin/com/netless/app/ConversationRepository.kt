@@ -27,7 +27,7 @@ interface MessageSender {
 	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState
 }
 
-class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val openOuter: (ByteArray) -> ByteArray = store::open, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val verifySignature: (ContentEnvelope) -> Boolean) {
+class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val verifySignature: (ContentEnvelope) -> Boolean) {
 	private val messages = LinkedHashMap<String, ChatMessage>()
 	private val contacts = LinkedHashMap<String, Contact>()
 	private val state = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -48,14 +48,16 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun updateEndpoint(profileId: String, endpoint: String) = synchronized(lock) { require(endpoint.isNotBlank()); val contact = contacts[profileId] ?: error("unknown contact"); contacts[profileId] = contact.copy(endpoint = endpoint); store.put("contact:$profileId", encode(contacts.getValue(profileId))); publish() }
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
 	suspend fun onIncomingContent(content: ContentEnvelope) {
-		runCatching {
-			require(verifySignature(content))
-			val payload = ConversationMessagePayload.decode(openOuter(content.encryptedPayload))
+		require(verifySignature(content)) { "content signature check failed" }
+		val payload = ConversationMessagePayload.decode(content.encryptedPayload)
+		require(content.recipients.any { it.value == payload.conversationId }) { "content recipient is not the conversation" }
+		require(payload.messageId == content.eventId) { "content message id does not match event id" }
+		require(messages[payload.messageId] == null) { "duplicate message id" }
 			val body = contentCipher.decrypt(payload.sessionId, payload.messageId, payload.conversationId, payload.content).decodeToString()
 			val conversationId = payload.conversationId
 			val messageId = payload.messageId
 			addIncoming(ChatMessage(messageId, conversationId, body, System.currentTimeMillis(), DeliveryState.Delivered, false))
-		}.getOrElse { onContent(content) }
+		onContent(content)
 	}
 	fun send(conversationId: String, text: String, policy: SendPolicy): Flow<DeliveryState> = kotlinx.coroutines.flow.flow {
 		require(conversationId.isNotBlank() && text.isNotBlank()); val message = ChatMessage(UUID.randomUUID().toString(), conversationId, text, System.currentTimeMillis(), DeliveryState.Queued); val payload = ConversationMessagePayload(conversationId, message.id, conversationId, contentCipher.encrypt(conversationId, message.id, conversationId, text.encodeToByteArray())); save(message); emitState(message.id, DeliveryState.Queued); emit(DeliveryState.Queued); val result = try { sender.send(message, payload, policy) } catch (error: CancellationException) { throw error } catch (_: Exception) { DeliveryState.Failed }; save(message.copy(deliveryState = result)); emitState(message.id, result); emit(result)
