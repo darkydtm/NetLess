@@ -20,12 +20,12 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 	BoxWithConstraints(Modifier.fillMaxSize()) {
 		val wide = maxWidth >= 600.dp
 		if (!wide) Column(Modifier.fillMaxSize()) {
-		if (wide) NavigationRail {
-			MessengerTab.entries.forEach { tab ->
-				NavigationRailItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) })
-			}
 			Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
-			NavigationBar { MessengerTab.entries.forEach { tab -> NavigationBarItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) } }
+			NavigationBar {
+			MessengerTab.entries.forEach { tab ->
+				NavigationBarItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) })
+			}
+			}
 		} else Row(Modifier.fillMaxSize()) {
 			NavigationRail { MessengerTab.entries.forEach { tab -> NavigationRailItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) } }
 			Box(Modifier.weight(1f).fillMaxHeight().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
@@ -55,7 +55,7 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 @Composable fun ConversationScreen(state: MessengerUiState, viewModel: MessengerViewModel, modifier: Modifier = Modifier) {
 	Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
 		Text(state.conversations.firstOrNull { it.id == state.selectedConversation }?.title ?: "Conversation", style = MaterialTheme.typography.titleLarge)
-		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.messages) { Text(it.body); Text(viewModel.uiState.value.deliveryLabel ?: "", style = MaterialTheme.typography.labelMedium) } }
+		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.messages) { message -> Text(message.body); Text(message.deliveryState.name, style = MaterialTheme.typography.labelMedium) } }
 		state.deliveryLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
 		Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f), label = { Text("Message") }); Button({ viewModel.send() }, enabled = state.draft.isNotBlank(), modifier = Modifier.semantics { contentDescription = "Send message" }) { Text("Send") } }
 	}
@@ -68,7 +68,7 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 
 @Composable fun SettingsScreen(profile: ProfileViewModel, state: MessengerUiState, viewModel: MessengerViewModel) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Settings", style = MaterialTheme.typography.headlineMedium); Text("Network", style = MaterialTheme.typography.titleMedium); NetworkSettingsScreen(state, viewModel); Text("Profile", style = MaterialTheme.typography.titleMedium); ProfileFields(profile) } }
 
-@Composable fun ProfileFields(viewModel: ProfileViewModel) { val state by viewModel.uiState.collectAsState(); OutlinedTextField(state.name, viewModel::nameChanged, label = { Text("Name") }); OutlinedTextField(state.bio, viewModel::bioChanged, label = { Text("Bio") }); Button(viewModel::save) { Text("Save profile") } }
+@Composable fun ProfileFields(viewModel: ProfileViewModel) { val state by viewModel.uiState.collectAsState(); when { state.loading -> CircularProgressIndicator(); else -> { OutlinedTextField(state.name, viewModel::nameChanged, label = { Text("Name") }); OutlinedTextField(state.bio, viewModel::bioChanged, label = { Text("Bio") }); state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; Button(viewModel::save, enabled = !state.saving) { Text(if (state.saving) "Saving..." else "Save profile") } } } }
 
 @Composable fun NetworkSettingsScreen(state: MessengerUiState, viewModel: MessengerViewModel) { Text("Automatic routing keeps the technical details out of your chats."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button({ viewModel.setPolicy(TransportPolicy.Automatic()) }) { Text("Automatic") }; Button({ viewModel.setPolicy(TransportPolicy.Strict(TransportType.Bluetooth)) }) { Text("Strict") } }; if (state.strictWarningVisible) AlertDialog(onDismissRequest = viewModel::dismissStrictWarning, title = { Text("Strict routing warning") }, text = { Text("Messages will use Bluetooth only and may not arrive.") }, confirmButton = { TextButton(viewModel::confirmStrictMode) { Text("Use strict mode") } }, dismissButton = { TextButton(viewModel::dismissStrictWarning) { Text("Cancel") } }); TextButton(viewModel::toggleExpertRoute, modifier = Modifier.semantics { contentDescription = "Show route details" }) { Text(if (state.routeDetails == null) "Show route details" else "Hide route details") }; state.routeDetails?.let { RouteDetailsSheet(it) } }
 

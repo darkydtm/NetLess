@@ -27,6 +27,7 @@ data class MessengerUiState(
 	val strictWarningVisible: Boolean = false,
 	val routeDetails: List<String>? = null,
 	val messages: List<ChatMessage> = emptyList(),
+	val deliveryByMessageId: Map<String, String> = emptyMap(),
 )
 
 class MessengerViewModel(

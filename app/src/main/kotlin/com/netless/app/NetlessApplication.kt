@@ -5,6 +5,8 @@ import com.netless.identity.IdentityRepository
 import com.netless.identity.KeystoreIdentityRepository
 import com.netless.transport.DiscoveryTransport
 import com.netless.content.AesContentCipher
+import com.netless.content.ConversationContentCipher
+import com.netless.content.ConversationKeyRegistry
 import com.netless.content.DurableEncryptedContentStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +41,13 @@ class AppContainer(application: Application) {
 	val wifiDirect = com.netless.transport.WifiDirectDataTransport()
 	private val localIdentity = identityRepository.getOrCreateIdentityBlocking()
 	val transportRegistry = TransportRegistry().also { it.register(wifiDirect.asAdapter(localIdentity.publicKey, { data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) })) }
-	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
+	private val databaseKeyStore = com.netless.database.DatabaseKeyStore()
+	private val storageKey = application.getSharedPreferences("netless-storage", 0).let { prefs ->
+		val wrapped = prefs.getString("key", null)?.let { java.util.Base64.getDecoder().decode(it) } ?: databaseKeyStore.createWrappedKey().wrappedKey.also { prefs.edit().putString("key", java.util.Base64.getEncoder().encodeToString(it)).commit() }
+		javax.crypto.spec.SecretKeySpec(databaseKeyStore.unprotect(wrapped), "AES")
+	}
+	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher(storageKey))
+	private val contentCipher = ConversationContentCipher(ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } })
 	lateinit var conversations: ConversationRepository
 	lateinit var meshRuntime: MeshRuntime
 	init {
@@ -67,16 +75,17 @@ class AppContainer(application: Application) {
 		verifySession = { key, data, signature -> identityRepository.verify(key, data, signature) },
 	)
 	conversations = ConversationRepository(contentStore, object : MessageSender {
-		override suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState {
+				override suspend fun send(message: ChatMessage, payload: com.netless.content.ConversationMessagePayload, policy: SendPolicy): DeliveryState {
+				val conversationId = message.conversationId
 				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
 				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
-				val messageId = UUID.randomUUID().toString()
-				val payload = contentStore.seal(conversations.encodeContent(conversationId, messageId, text))
-				val envelope = com.netless.protocol.ContentEnvelope(UUID.randomUUID().toString(), localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload, identityRepository.sign(payload).bytes)
+				val sealed = contentStore.seal(payload.encode())
+				val envelope = com.netless.protocol.ContentEnvelope(UUID.randomUUID().toString(), localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), sealed, identityRepository.sign(sealed).bytes)
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
-	}, onContent = { content -> contentStore.put("pending:${content.eventId}", content.encryptedPayload) })
+			override suspend fun send(conversationId: String, text: String, policy: SendPolicy) = error("Use encrypted message sender")
+	}, contentCipher = contentCipher, verifySignature = { content -> kotlinx.coroutines.runBlocking { identityRepository.verify(localIdentity.publicKey, content.encryptedPayload, com.netless.crypto.Signature(content.senderSignature)) } })
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },

@@ -23,9 +23,12 @@ sealed interface SendPolicy {
 	data object Automatic : SendPolicy
 	data class Network(val policy: com.netless.transport.TransportPolicy) : SendPolicy
 }
-interface MessageSender { suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState }
+interface MessageSender {
+	suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState
+	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState = send(message.conversationId, message.body, policy)
+}
 
-class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val contentCipher: ConversationContentCipher? = null, private val verifySignature: (ContentEnvelope) -> Boolean = { true }) {
+class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val contentCipher: ConversationContentCipher = ConversationContentCipher(com.netless.content.ConversationKeyRegistry { _, _, _ -> true }.also { it.register("conversation", javax.crypto.KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) }), private val verifySignature: (ContentEnvelope) -> Boolean = { true }) {
 	private val messages = LinkedHashMap<String, ChatMessage>()
 	private val contacts = LinkedHashMap<String, Contact>()
 	private val state = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -49,14 +52,14 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 		runCatching {
 			require(verifySignature(content))
 			val payload = ConversationMessagePayload.decode(content.encryptedPayload)
-			val body = contentCipher?.decrypt(payload.sessionId, payload.messageId, payload.conversationId, payload.content)?.decodeToString() ?: error("conversation cipher unavailable")
+			val body = contentCipher.decrypt(payload.sessionId, payload.messageId, payload.conversationId, payload.content).decodeToString()
 			val conversationId = payload.conversationId
 			val messageId = payload.messageId
 			addIncoming(ChatMessage(messageId, conversationId, body, System.currentTimeMillis(), DeliveryState.Delivered, false))
 		}.getOrElse { onContent(content) }
 	}
 	fun send(conversationId: String, text: String, policy: SendPolicy): Flow<DeliveryState> = kotlinx.coroutines.flow.flow {
-		require(conversationId.isNotBlank() && text.isNotBlank()); val message = ChatMessage(UUID.randomUUID().toString(), conversationId, text, System.currentTimeMillis(), DeliveryState.Queued); save(message); emitState(message.id, DeliveryState.Queued); emit(DeliveryState.Queued); val result = try { sender.send(conversationId, text, policy) } catch (error: CancellationException) { throw error } catch (_: Exception) { DeliveryState.Failed }; save(message.copy(deliveryState = result)); emitState(message.id, result); emit(result)
+		require(conversationId.isNotBlank() && text.isNotBlank()); val message = ChatMessage(UUID.randomUUID().toString(), conversationId, text, System.currentTimeMillis(), DeliveryState.Queued); val payload = ConversationMessagePayload(conversationId, message.id, conversationId, contentCipher.encrypt(conversationId, message.id, conversationId, text.encodeToByteArray())); save(message); emitState(message.id, DeliveryState.Queued); emit(DeliveryState.Queued); val result = try { sender.send(message, payload, policy) } catch (error: CancellationException) { throw error } catch (_: Exception) { DeliveryState.Failed }; save(message.copy(deliveryState = result)); emitState(message.id, result); emit(result)
 	}
 	fun encodeContent(conversationId: String, messageId: String, text: String): ByteArray = text.encodeToByteArray()
 	fun addIncoming(message: ChatMessage) = save(message.copy(read = false))

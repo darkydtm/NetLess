@@ -12,6 +12,8 @@ class ConversationKeyRegistry(
 	private val keys = HashMap<String, SecretKey>()
 	private val sessions = HashSet<String>()
 
+	fun register(sessionId: String, key: SecretKey) { keys[sessionId] = key; sessions.add(sessionId) }
+
 	fun establish(
 		offer: KeyExchangeOffer,
 		local: EphemeralKeyExchange,
