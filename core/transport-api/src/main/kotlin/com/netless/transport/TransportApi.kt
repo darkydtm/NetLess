@@ -54,6 +54,11 @@ class TransportEndpoint(
 	override fun hashCode(): Int = 31 * (31 * nodeId.hashCode() + address.hashCode()) + metadata.hashCode()
 }
 
+data class TransportHop(
+	val transport: TransportType,
+	val endpoint: TransportEndpoint,
+) : Serializable
+
 enum class DiscoveryCapability {
 	Relay,
 	LowLatency,
