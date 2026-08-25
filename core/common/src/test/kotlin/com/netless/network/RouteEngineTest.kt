@@ -56,18 +56,97 @@ class RouteEngineTest {
 	}
 
 	@Test
-	fun `preferred policy ranks routes by first matching transport`() {
+	fun `route expiry is the earliest hop expiry`() {
+		val graph = graphOf(
+			hop("a", "b", TransportType.Bluetooth, expiresAt = 150L),
+			hop("b", "target", TransportType.WifiDirect, expiresAt = 250L),
+		)
+
+		assertEquals(150L, graph.routesTo(target, 100L).single().expiresAtMillis)
+		assertNull(engine.select(target, graph, TransportPolicy.Automatic(), 150L))
+	}
+
+	@Test
+	fun `route preserves hop endpoints and metrics`() {
+		val first = hop("a", "b", TransportType.Bluetooth, expiresAt = 150L).copy(
+			endpoint = TransportEndpoint(NodeId("b"), "bluetooth-b"),
+			metrics = RouteMetrics(10.0, 2.0, 3.0, 0.9),
+		)
+		val second = hop("b", "target", TransportType.WifiDirect, expiresAt = 250L).copy(
+			endpoint = TransportEndpoint(target, "wifi-target"),
+			metrics = RouteMetrics(20.0, 4.0, 5.0, 0.8),
+		)
+
+		val route = graphOf(first, second).routesTo(target, 100L).single()
+
+		assertEquals(listOf(first, second), route.hops)
+		assertEquals(RouteMetrics(10.0, 6.0, 8.0, 0.72), route.metrics)
+	}
+
+	@Test
+	fun `cyclic paths respect hop limit`() {
+		val graph = RouteGraph(
+			listOf(
+				hop("a", "b", TransportType.Bluetooth),
+				hop("b", "a", TransportType.Bluetooth),
+				hop("b", "target", TransportType.WifiDirect),
+			),
+			maxHops = 1,
+		)
+
+		assertNull(engine.select(target, graph, TransportPolicy.Automatic(), 100L))
+	}
+
+	@Test
+	fun `equal routes are selected in node order`() {
 		val route = engine.select(
 			target,
 			graphOf(
-				hop("a", "target", TransportType.Bluetooth),
+				hop("a", "c", TransportType.Bluetooth),
+				hop("c", "target", TransportType.WifiDirect),
+				hop("a", "b", TransportType.Bluetooth),
 				hop("b", "target", TransportType.WifiDirect),
+			),
+			TransportPolicy.Automatic(),
+			100L,
+		)
+
+		assertEquals(listOf(NodeId("a"), NodeId("b"), target), route!!.nodes)
+	}
+
+	@Test
+	fun `preferred policy uses the first hop`() {
+		val route = engine.select(
+			target,
+			graphOf(
+				hop("a", "b", TransportType.Bluetooth),
+				hop("b", "target", TransportType.WifiDirect),
+				hop("a", "c", TransportType.WifiDirect),
+				hop("c", "target", TransportType.Bluetooth),
 			),
 			TransportPolicy.Preferred(listOf(TransportType.WifiDirect, TransportType.Bluetooth)),
 			100L,
 		)
 
-		assertEquals(TransportType.WifiDirect, route!!.hops.single().transport)
+		assertEquals(TransportType.WifiDirect, route!!.hops.first().transport)
+		assertEquals(NodeId("c"), route.nodes[1])
+	}
+
+	@Test
+	fun `preferred policy falls back from unavailable transport`() {
+		val route = engine.select(
+			target,
+			graphOf(
+				hop("a", "b", TransportType.WifiDirect),
+				hop("b", "target", TransportType.WifiDirect).copy(metrics = RouteMetrics(1.0, 1.0, 1.0, 0.0)),
+				hop("a", "c", TransportType.Bluetooth),
+				hop("c", "target", TransportType.Bluetooth),
+			),
+			TransportPolicy.Preferred(listOf(TransportType.WifiDirect, TransportType.Bluetooth)),
+			100L,
+		)
+
+		assertEquals(TransportType.Bluetooth, route!!.hops.first().transport)
 	}
 
 	@Test

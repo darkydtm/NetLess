@@ -15,9 +15,11 @@ class RouteEngine(private val selector: RouteSelector = RouteSelector()) {
 		if (routes.isEmpty()) return null
 
 		if (policy.mode == TransportSelectionMode.Preferred) {
-			return policy.preferences.mapIndexedNotNull { index, transport ->
-				selector.select(routes.filter { route -> route.hops.any { it.transport == transport } }, TransferPolicy(maxHops = graph.hopLimit), nowMillis)?.let { index to it }
-			}.minByOrNull { it.first }?.second
+			for (transport in policy.preferences) {
+				val preferred = routes.filter { it.hops.first().transport == transport }
+				selector.select(preferred, TransferPolicy(maxHops = graph.hopLimit), nowMillis)?.let { return it }
+			}
+			return null
 		}
 		return selector.select(routes, TransferPolicy(maxHops = graph.hopLimit), nowMillis)
 	}

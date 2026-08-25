@@ -3,6 +3,7 @@ package com.netless.transport
 import com.netless.common.NodeId
 import kotlinx.coroutines.flow.Flow
 import java.io.Serializable
+import java.util.Collections
 
 enum class TransportState {
 	Unavailable,

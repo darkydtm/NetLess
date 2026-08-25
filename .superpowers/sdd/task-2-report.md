@@ -71,3 +71,24 @@ Focused Gradle tests could not run because this repository has no Gradle wrapper
 ### Fix Commit
 
 - `10716ff fix route engine review regressions`
+
+## Re-review Fix Report
+
+### Findings fixed
+
+- Restored the missing `java.util.Collections` import in `core/transport-api/src/main/kotlin/com/netless/transport/TransportApi.kt`.
+- Clarified preferred transport selection to use the first hop consistently, in preference order, then delegate route scoring and availability filtering to `RouteSelector`.
+- Added focused regressions for earliest-hop route expiry, hop endpoint and metrics preservation, cyclic hop limits, deterministic equal-route ordering, and preferred fallback when the higher-priority transport is unavailable.
+
+### Verification
+
+```text
+$ ./gradlew :core:common:test
+/usr/bin/bash: ./gradlew: No such file or directory
+exit: 127
+
+$ git diff --check
+PASS
+```
+
+The requested `core:common` tests could not run because this checkout has no Gradle wrapper and no system `gradle` executable. Unrelated worktree paths `.sign/`, `.superpowers/`, and `prototype/` were preserved.
