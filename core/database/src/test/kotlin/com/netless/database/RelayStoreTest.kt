@@ -101,18 +101,16 @@ class RelayStoreTest {
 	}
 
 	@Test
-	fun defaultStoragePersistsAcrossStoreRecreation() {
-		val home = File.createTempFile("relay-home", "").apply { delete(); mkdirs() }
-		val previousHome = System.getProperty("user.home")
+	fun explicitStoragePersistsAcrossStoreRecreation() {
+		val file = File.createTempFile("relay-store", ".bin")
 		try {
-			System.setProperty("user.home", home.path)
 			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
-			RelayStore(keyStore).put(byteArrayOf(1), packetId, Long.MAX_VALUE, nextHop)
+			RelayStore(keyStore, file).put(byteArrayOf(1), packetId, Long.MAX_VALUE, nextHop)
 
-			assertContentEquals(byteArrayOf(1), RelayStore(keyStore).get(packetId)!!.packet)
+			assertContentEquals(byteArrayOf(1), RelayStore(keyStore, file).get(packetId)!!.packet)
 		} finally {
-			if (previousHome == null) System.clearProperty("user.home") else System.setProperty("user.home", previousHome)
-			home.deleteRecursively()
+			file.delete()
+			File(file.path + ".lock").delete()
 		}
 	}
 
@@ -200,6 +198,23 @@ class RelayStoreTest {
 			val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), file, nowMillis = { 0L })
 
 			assertEquals(0, store.count())
+		} finally {
+			file.delete()
+		}
+	}
+
+	@Test
+	fun malformedPersistedKeyIsIgnored() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			DataOutputStream(file.outputStream()).use { output ->
+				output.writeInt(1)
+				output.writeUTF("not-a-relay-key")
+				output.writeLong(100L)
+				output.writeBoolean(false)
+			}
+
+			assertEquals(0, RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), file, nowMillis = { 0L }).count())
 		} finally {
 			file.delete()
 		}

@@ -16,9 +16,6 @@ private const val MAX_PERSISTED_ENTRIES = 10_000
 private const val MAX_PERSISTED_VALUE_BYTES = 2 * 1024 * 1024
 private const val MAX_PACKET_BYTES = 1024 * 1024
 
-private fun defaultRelayStorageFile(): File =
-	File(System.getProperty("user.home", "."), ".netless/relay-store.bin")
-
 enum class RelayState {
 	PENDING,
 }
@@ -38,7 +35,7 @@ class StoredRelayPacket(
 
 class RelayStore(
 	private val databaseKeyStore: DatabaseKeyStore = DatabaseKeyStore(),
-	private val storageFile: File? = defaultRelayStorageFile(),
+	private val storageFile: File? = null,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
 	private companion object {
@@ -121,7 +118,7 @@ class RelayStore(
 	@Synchronized
 	fun count(): Int = withFileLock {
 		load()
-		records.size
+		deduplication.size
 	}
 
 	private fun key(packetId: PacketId): String = "relay:${packetId.value}"
@@ -152,18 +149,18 @@ class RelayStore(
 		} catch (_: IllegalArgumentException) {
 			return
 		}
-		loadedDeduplication.forEach { (key, expiry) ->
-			val value = loadedRecords[key]
+		loadedDeduplication.forEach { (storedKey, expiry) ->
+			if (!storedKey.startsWith("relay:") || storedKey.length == "relay:".length) return@forEach
+			val value = loadedRecords[storedKey]
 			if (value == null) {
-				require(key.startsWith("relay:"))
-				deduplication[key] = expiry
+				deduplication[storedKey] = expiry
 				return@forEach
 			}
 			try {
 				val packet = deserialize(databaseKeyStore.unprotect(value))
-				require(key == key(packet.packetId) && expiry == packet.expiresAtMillis)
-				records[key] = value
-				deduplication[key] = expiry
+				require(storedKey == key(packet.packetId) && expiry == packet.expiresAtMillis)
+				records[storedKey] = value
+				deduplication[storedKey] = expiry
 			} catch (_: Exception) {
 				return@forEach
 			}
