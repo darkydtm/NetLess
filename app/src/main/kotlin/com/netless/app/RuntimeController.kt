@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import com.netless.transport.DiscoveryAdvertisement
 import com.netless.transport.DiscoveryCapability
 import com.netless.transport.TransportType
@@ -24,7 +25,11 @@ class RuntimeController(
 	fun startDiscovery() {
 		if (discoveryJob != null) return
 		discoveryJob = scope.launch {
-			localPort = peerMessages?.startServer(scope) ?: 0
+			localPort = runCatching {
+				kotlinx.coroutines.withContext(Dispatchers.IO) {
+					peerMessages?.startServer(this) ?: 0
+				}
+			}.getOrDefault(0)
 			advertisement(localPort)?.let {
 				ble.advertise(it)
 				wifiDirect.advertise(it)
