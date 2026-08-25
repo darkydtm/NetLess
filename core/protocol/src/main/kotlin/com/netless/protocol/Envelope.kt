@@ -17,10 +17,12 @@ class ForwardingEnvelope(
 	val ttl: Long,
 	val trafficClass: TrafficClass,
 	perHopIntegrity: ByteArray,
+	currentNodeId: NodeId = finalNodeId,
 ) : Serializable {
 	private val perHopIntegrityValue = perHopIntegrity.copyOf()
 
 	val nextHop: NodeId? = nextHop
+	val currentNodeId: NodeId = currentNodeId
 	val perHopIntegrity: ByteArray
 		get() = perHopIntegrityValue.copyOf()
 
@@ -32,6 +34,7 @@ class ForwardingEnvelope(
 
 	fun copy(
 		packetId: PacketId = this.packetId,
+		currentNodeId: NodeId = this.currentNodeId,
 		finalNodeId: NodeId = this.finalNodeId,
 		nextHop: NodeId? = this.nextHop,
 		hopCount: Int = this.hopCount,
@@ -40,6 +43,7 @@ class ForwardingEnvelope(
 		perHopIntegrity: ByteArray = this.perHopIntegrity,
 	) = ForwardingEnvelope(
 		packetId,
+		currentNodeId,
 		finalNodeId,
 		nextHop,
 		hopCount,
@@ -51,6 +55,7 @@ class ForwardingEnvelope(
 	override fun equals(other: Any?): Boolean =
 		other is ForwardingEnvelope &&
 			packetId == other.packetId &&
+			currentNodeId == other.currentNodeId &&
 			finalNodeId == other.finalNodeId &&
 			nextHop == other.nextHop &&
 			hopCount == other.hopCount &&
@@ -60,6 +65,7 @@ class ForwardingEnvelope(
 
 	override fun hashCode(): Int {
 		var result = packetId.hashCode()
+		result = 31 * result + currentNodeId.hashCode()
 		result = 31 * result + finalNodeId.hashCode()
 		result = 31 * result + (nextHop?.hashCode() ?: 0)
 		result = 31 * result + hopCount
@@ -142,3 +148,9 @@ data class PacketEnvelope(
 		}
 	}
 }
+
+data class HopAcknowledgement(
+	val packetId: PacketId,
+	val nodeId: NodeId,
+	val accepted: Boolean,
+) : Serializable

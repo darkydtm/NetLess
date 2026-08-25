@@ -32,6 +32,7 @@ class MeshRuntime(
 	private val nowMillis: () -> Long = System::currentTimeMillis,
 	private val signPacket: suspend (PacketEnvelope) -> ByteArray = { byteArrayOf() },
 	private val verifySenderSignature: suspend (ContentEnvelope) -> Boolean = { false },
+	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 ) {
 	private val deliveries = MutableSharedFlow<DeliveryReceipt>(extraBufferCapacity = 16)
 
@@ -39,7 +40,7 @@ class MeshRuntime(
 		val now = nowMillis()
 		val packetId = PacketId(UUID.randomUUID().toString())
 		val selected = route(destination, policy) ?: return receipt(packetId, DeliveryState.Failed)
-		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
+		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(unsigned)
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
@@ -55,13 +56,14 @@ class MeshRuntime(
 	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
 		val now = nowMillis()
 		val packet = codec.decode(bytes, now)
-		require(packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode) { "packet is not addressed to this node" }
+		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
 		require(validIntegrity(packet, bytes)) { "packet integrity check failed" }
 		require(verifySenderSignature(packet.content)) { "packet signature check failed" }
 		if (relayStore?.contains(packet.forwarding.packetId) == true) {
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
 		}
 		if (packet.forwarding.finalNodeId == localNode) {
+			onContent(packet.content)
 			relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
 			relayStore?.markDelivered(packet.forwarding.packetId)
 			val result = receipt(packet.forwarding.packetId, DeliveryState.Delivered)
@@ -69,10 +71,13 @@ class MeshRuntime(
 			return result
 		}
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
-			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed)
-		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed)
-		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
-		return forward(bytes, packet.forwarding.packetId, hop)
+			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(deliveries::tryEmit)
+		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(deliveries::tryEmit)
+		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = hop.nextNodeId, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
+		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(rewritten, now))
+		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
+		relayStore?.put(forwardedBytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
+		return forward(forwardedBytes, packet.forwarding.packetId, hop)
 	}
 
 	fun observeDelivery(packetId: PacketId): Flow<DeliveryReceipt> = deliveries.asSharedFlow()
@@ -80,14 +85,14 @@ class MeshRuntime(
 
 	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?): DeliveryReceipt {
 		if (hop == null) return receipt(packetId, DeliveryState.Delivered).also(deliveries::tryEmit)
-		val adapter = transports.adapter(hop.transport)
-			?: return receipt(packetId, DeliveryState.Failed)
+		val adapter = transports.available(hop.transport)
+			?: return receipt(packetId, DeliveryState.Failed).also(deliveries::tryEmit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
 				connection.send(bytes)
 				connection.close()
 			} catch (error: Exception) {
-				return receipt(packetId, DeliveryState.Failed)
+				return receipt(packetId, DeliveryState.Failed).also(deliveries::tryEmit)
 			}
 		val result = receipt(packetId, DeliveryState.Relaying)
 		deliveries.tryEmit(result)

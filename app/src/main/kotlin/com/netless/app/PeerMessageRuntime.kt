@@ -15,6 +15,9 @@ class PeerMessageRuntime(
 	private val receivePacket: suspend (ByteArray, com.netless.transport.TransportType) -> Unit,
 	private val wifi: WifiDirectDataTransport,
 	private val wifiDiscovery: WifiDirectDiscoveryTransport? = null,
+	private val identityPublicKey: com.netless.crypto.PublicKey? = null,
+	private val sign: (suspend (ByteArray) -> com.netless.crypto.Signature)? = null,
+	private val verify: (suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean)? = null,
 ) {
 	private var serverJob: Job? = null
 	private var serverPort: Int = 0
@@ -28,6 +31,7 @@ class PeerMessageRuntime(
 			try {
 				while (true) {
 					val session = SessionTransport(server!!.accept())
+					if (identityPublicKey != null && sign != null && verify != null) session.acceptAuthenticated(1, identityPublicKey, sign, verify)
 					launch { accept(session) }
 				}
 			} catch (error: java.net.SocketException) {

@@ -16,3 +16,13 @@ Verification:
 Known boundary:
 
 - Current discovery advertisements expose direct peer endpoints, so the production graph builds direct discovered edges. Multi-hop graph edges require neighboring-node route advertisements; no BLE payload or synthetic BLE data was added.
+
+## Latest review follow-up
+
+- Added `currentNodeId` to forwarding metadata and rewrite it with the next hop at each relay; the versioned codec includes the complete metadata.
+- Added final-node `onContent` handoff so mesh routing preserves opaque encrypted content for the conversation layer.
+- Restored optional authenticated session acceptance in `PeerMessageRuntime` while retaining its existing packet callback constructor and `SessionTransport` packet API.
+- Delivery failures now emit through `observeDelivery`; relay persistence remains until delivery processing.
+- Adapter lookup now exposes availability-aware selection support.
+
+Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The requested actual multi-instance runtime tests could not be executed in this environment.

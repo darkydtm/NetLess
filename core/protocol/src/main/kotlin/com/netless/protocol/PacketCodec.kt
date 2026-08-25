@@ -69,6 +69,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 
 	private fun writeForwarding(output: DataOutputStream, envelope: ForwardingEnvelope) {
 		writeString(output, envelope.packetId.value)
+		writeString(output, envelope.currentNodeId.value)
 		writeString(output, envelope.finalNodeId.value)
 		output.writeBoolean(envelope.nextHop != null)
 		if (envelope.nextHop != null) writeString(output, envelope.nextHop.value)
@@ -90,6 +91,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 
 	private fun readForwarding(input: DataInputStream): ForwardingEnvelope {
 		val packetId = PacketId(readString(input))
+		val currentNodeId = NodeId(readString(input))
 		val finalNodeId = NodeId(readString(input))
 		val nextHop = when (val flag = input.readUnsignedByte()) {
 			0 -> null
@@ -100,7 +102,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 		val ttl = input.readLong()
 		val trafficClass = TrafficClass.entries.getOrNull(input.readInt())
 			?: throw IllegalArgumentException("Invalid traffic class")
-		return ForwardingEnvelope(packetId, finalNodeId, nextHop, hopCount, ttl, trafficClass, readBytes(input))
+		return ForwardingEnvelope(packetId, finalNodeId, nextHop, hopCount, ttl, trafficClass, readBytes(input), currentNodeId)
 	}
 
 	private fun readContent(input: DataInputStream): ContentEnvelope {
