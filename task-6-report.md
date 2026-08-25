@@ -36,3 +36,9 @@ Implemented persistent conversation message and contact projections over `Durabl
 ## Limitations
 
 - The current workspace does not expose a runnable Gradle wrapper, so Kotlin compilation and tests remain unverified locally.
+
+## Follow-up Integration
+
+- Conversation sends now bridge to `MeshRuntime` with the selected transport policy instead of a permanent failed stub.
+- Legacy NUL-delimited records are decoded during conversation startup.
+- Incoming relay payloads remain opaque until the established conversation-key envelope format is wired through the repository.

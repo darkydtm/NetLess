@@ -19,24 +19,28 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 	val state by viewModel.uiState.collectAsState()
 	BoxWithConstraints(Modifier.fillMaxSize()) {
 		val wide = maxWidth >= 600.dp
-		Row(Modifier.fillMaxSize()) {
+		if (!wide) Column(Modifier.fillMaxSize()) {
 		if (wide) NavigationRail {
 			MessengerTab.entries.forEach { tab ->
 				NavigationRailItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) })
 			}
-		} else NavigationBar {
-			MessengerTab.entries.forEach { tab -> NavigationBarItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) }
+			Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
+			NavigationBar { MessengerTab.entries.forEach { tab -> NavigationBarItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) } }
+		} else Row(Modifier.fillMaxSize()) {
+			NavigationRail { MessengerTab.entries.forEach { tab -> NavigationRailItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) } }
+			Box(Modifier.weight(1f).fillMaxHeight().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
+			if (state.currentTab == MessengerTab.Chats) ConversationScreen(state, viewModel, Modifier.weight(1f).fillMaxHeight())
 		}
-		Box(Modifier.weight(1f).fillMaxHeight().padding(16.dp)) {
-			AnimatedContent(state.currentTab, label = "messenger-tab") { tab -> when (tab) {
-				MessengerTab.Chats -> ChatListScreen(state, viewModel)
-				MessengerTab.Contacts -> ContactsScreen(contacts)
-				MessengerTab.Settings -> SettingsScreen(profile, state, viewModel)
-			} }
-		}
-		if (wide && state.currentTab == MessengerTab.Chats) ConversationScreen(state, viewModel, Modifier.weight(1f).fillMaxHeight())
 		}
 	}
+}
+
+@Composable private fun currentMessengerScreen(state: MessengerUiState, viewModel: MessengerViewModel, profile: ProfileViewModel, contacts: List<com.netless.transport.DiscoveredNode>) {
+		when (state.currentTab) {
+			MessengerTab.Chats -> ChatListScreen(state, viewModel)
+			MessengerTab.Contacts -> ContactsScreen(contacts)
+			MessengerTab.Settings -> SettingsScreen(profile, state, viewModel)
+		}
 }
 
 @Composable fun ChatListScreen(state: MessengerUiState, viewModel: MessengerViewModel) {

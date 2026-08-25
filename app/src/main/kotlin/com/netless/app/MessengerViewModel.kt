@@ -38,6 +38,7 @@ class MessengerViewModel(
 	init {
 		repository?.let { repo ->
 			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }) } } }
+			viewModelScope.launch { repo.observeMessages(_uiState.value.selectedConversation).collect { messages -> _uiState.update { it.copy(messages = messages) } } }
 		}
 	}
 
@@ -59,7 +60,7 @@ class MessengerViewModel(
 				},
 			)
 		}
-		repository?.let { repo -> viewModelScope.launch { repo.send(conversation, text.trim(), SendPolicy.Automatic).collect(::onDelivery) } }
+		repository?.let { repo -> viewModelScope.launch { repo.send(conversation, text.trim(), SendPolicy.Network(uiState.value.networkPolicy)).collect(::onDelivery) } }
 	}
 
 	fun setPolicy(policy: TransportPolicy) {

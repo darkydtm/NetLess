@@ -41,7 +41,9 @@ class AppContainer(application: Application) {
 	val transportRegistry = TransportRegistry().also { it.register(wifiDirect.asAdapter(localIdentity.publicKey, { data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) })) }
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
 	lateinit var conversations: ConversationRepository
-	val meshRuntime = MeshRuntime(
+	lateinit var meshRuntime: MeshRuntime
+	init {
+	meshRuntime = MeshRuntime(
 		com.netless.common.NodeId(localIdentity.profileId.value), transportRegistry,
 		{ destination, policy ->
 			val available = transportRegistry.availableAdapters()
@@ -65,8 +67,16 @@ class AppContainer(application: Application) {
 		verifySession = { key, data, signature -> identityRepository.verify(key, data, signature) },
 	)
 	conversations = ConversationRepository(contentStore, object : MessageSender {
-		override suspend fun send(conversationId: String, text: String, policy: SendPolicy) = DeliveryState.Failed
-	})
+		override suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState {
+				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
+				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
+				val payload = contentStore.seal(text.encodeToByteArray())
+				val envelope = com.netless.protocol.ContentEnvelope(UUID.randomUUID().toString(), localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload, identityRepository.sign(payload).bytes)
+				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
+				meshRuntime.send(envelope, destination, selected).state
+			}
+	}, onContent = { content -> contentStore.put("pending:${content.eventId}", content.encryptedPayload) })
+	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },
 		{ bytes, ingress -> meshRuntime.receiveFrame(bytes, ingress) })
