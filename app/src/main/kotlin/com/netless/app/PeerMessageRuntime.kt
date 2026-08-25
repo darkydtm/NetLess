@@ -5,7 +5,7 @@ import com.netless.identity.IdentityRepository
 import com.netless.transport.WifiDirectDataTransport
 import com.netless.transport.SessionTransport
 import com.netless.transport.TransportEndpoint
-import java.nio.charset.StandardCharsets
+import com.netless.protocol.VersionedPacketCodec
 import java.net.ServerSocket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,7 +69,11 @@ class PeerMessageRuntime(
 		try {
 			val host = wifiDiscovery?.connectPeer(endpoint) ?: endpoint.address
 			val connection = wifi.connectAuthenticated(TransportEndpoint(endpoint.nodeId, host, endpoint.metadata), 1, endpoint.metadata["sessionId"] ?: error("session id is missing"), identity.getOrCreateIdentity().publicKey, identity::sign, identity::verify)
-			connection.send(MessageFrame.encode(conversationId, body))
+			val packet = VersionedPacketCodec.encode(com.netless.protocol.PacketEnvelope(
+				com.netless.protocol.ForwardingEnvelope(com.netless.common.PacketId(java.util.UUID.randomUUID().toString()), endpoint.nodeId, endpoint.nodeId, 0, 1, com.netless.common.TrafficClass.Reliable, byteArrayOf(1)),
+				com.netless.protocol.ContentEnvelope(conversationId, identity.getOrCreateIdentity().profileId, listOf(com.netless.common.ProfileId(endpoint.metadata["profileId"] ?: error("peer profile is missing"))), body.toByteArray(), byteArrayOf(1)),
+			))
+			connection.send(packet)
 			connection.close()
 		} catch (error: java.io.IOException) {
 			throw IllegalStateException("peer connection failed", error)
@@ -77,19 +81,7 @@ class PeerMessageRuntime(
 	}
 
 	fun receive(frame: ByteArray) {
-		val message = MessageFrame.decode(frame)
-		messages.send(message.conversationId, message.body)
-	}
-}
-
-private data class PeerMessage(val conversationId: String, val body: String)
-
-private object MessageFrame {
-	fun encode(conversationId: String, body: String): ByteArray = "$conversationId\u0000$body".toByteArray(StandardCharsets.UTF_8)
-
-	fun decode(bytes: ByteArray): PeerMessage {
-		val parts = String(bytes, StandardCharsets.UTF_8).split('\u0000', limit = 2)
-		require(parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) { "invalid message frame" }
-		return PeerMessage(parts[0], parts[1])
+		val packet = VersionedPacketCodec.decode(frame)
+		messages.send(packet.content.eventId, String(packet.content.encryptedPayload))
 	}
 }

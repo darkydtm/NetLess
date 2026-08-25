@@ -17,6 +17,7 @@ class RuntimeController(
 	private val contacts: ContactStore,
 	private val audio: AudioRuntime,
 	private val peerMessages: PeerMessageRuntime? = null,
+	private val meshRuntime: MeshRuntime? = null,
 	private val advertisement: (Int) -> DiscoveryAdvertisement? = { null },
 ) {
 	private var discoveryJob: Job? = null
@@ -51,4 +52,5 @@ class RuntimeController(
 
 	fun startAudio() = audio.start()
 	fun stopAudio() = audio.stop()
+	fun mesh(): MeshRuntime? = meshRuntime
 }
