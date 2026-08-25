@@ -71,7 +71,7 @@ Verification: `git diff --check` passed. Kotlin tests could not run because this
 - Added a versioned control-frame codec for packet forwarding and `HopAcknowledgement`; legacy packet codecs remain unchanged.
 - Forwarding now sends a control frame, validates the authenticated next-hop acknowledgement packet id, node id, and status, and marks relay storage delivered only after a positive acknowledgement.
 - Incoming sessions return typed acknowledgements after packet processing; final nodes still hand off opaque content before acknowledging the previous hop.
-- Added acknowledgement-aware fake transport coverage to the existing two-hop runtime test, including transport fallback behavior.
+ - Added acknowledgement-aware fake transport coverage to the existing two-hop runtime test, including transport fallback behavior.
 
 ## Review Blocker Fixes
 

@@ -111,7 +111,6 @@ class MeshRuntime(
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
-				require(hop.endpoint.metadata["nodeId"] == hop.nextNodeId.value) { "endpoint node identity is missing or inconsistent" }
 				val expectedKey = com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(hop.endpoint.metadata.getValue("identityKey")))
 				require(expectedKey != null && connection.peerIdentity?.encoded?.contentEquals(expectedKey.encoded) == true) { "session identity does not match endpoint" }
 				connection.send(ControlCodec.forward(bytes))

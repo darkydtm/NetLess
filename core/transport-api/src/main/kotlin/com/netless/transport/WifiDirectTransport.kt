@@ -37,7 +37,7 @@ class WifiDirectDataTransport : DataTransport {
 		val port = endpoint.metadata["port"]?.toIntOrNull()
 		require(port != null && port in 1..65535) { "Wi-Fi Direct endpoint must contain a valid port" }
 		_state.value = TransportState.Connecting
-		val socket = Socket().apply { connect(InetSocketAddress(endpoint.address, port)) }
+		val socket = try { Socket().apply { connect(InetSocketAddress(endpoint.address, port)) } } catch (error: Exception) { markFailed(); throw error }
 		val session = SessionTransport(socket)
 		try { session.establishAuthenticated(protocolVersion, sessionId, identityPublicKey, sign, verify) } catch (error: Exception) { markFailed(); session.close(); throw error }
 		_state.value = TransportState.Connected
