@@ -14,6 +14,7 @@ import com.netless.protocol.VersionedPacketCodec
 import com.netless.protocol.ControlCodec
 import com.netless.protocol.Acknowledgement
 import com.netless.protocol.HopAcknowledgement
+import com.netless.protocol.Receipt
 import com.netless.transport.TransportConnection
 import com.netless.transport.TransportPolicy
 import com.netless.transport.TransportType
@@ -95,9 +96,10 @@ class MeshRuntime(
 		return when (val decoded = ControlCodec.decode(frame)) {
 			is com.netless.protocol.Forward -> {
 				val receipt = receive(decoded.packet, ingress)
-				ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0, receipt.state == DeliveryState.Delivered))
+				if (receipt.state == DeliveryState.Delivered) ControlCodec.receipt(receipt) else ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0))
 			}
 			is Acknowledgement -> frame
+			is Receipt -> { if (decoded.value.state == DeliveryState.Delivered) relayStore?.markDelivered(decoded.value.packetId); frame }
 		}
 	}
 
