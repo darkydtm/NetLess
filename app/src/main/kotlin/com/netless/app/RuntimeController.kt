@@ -35,6 +35,7 @@ class RuntimeController(
 	}
 
 	fun stopDiscovery() {
+		peerMessages?.stopServer()
 		discoveryJob?.cancel()
 		discoveryJob = null
 		scope.launch {

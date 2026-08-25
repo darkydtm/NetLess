@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 
 class PeerMessageRuntime(
 	private val identity: IdentityRepository,
@@ -21,17 +22,23 @@ class PeerMessageRuntime(
 ) {
 	private var serverJob: Job? = null
 	private var serverPort: Int = 0
+	private var server: ServerSocket? = null
 
 	fun startServer(scope: CoroutineScope, port: Int = 0): Int {
 		if (serverJob != null) return serverPort
-		val server = ServerSocket(port)
-		serverPort = server.localPort
+		server = ServerSocket(port)
+		serverPort = server!!.localPort
 		serverJob = scope.launch(Dispatchers.IO) {
-			server.use {
+			try {
 				while (true) {
-					val session = SessionTransport(it.accept())
+					val session = SessionTransport(server!!.accept())
 					launch { accept(session) }
 				}
+			} catch (error: java.net.SocketException) {
+				if (isActive) throw error
+			} finally {
+				server?.close()
+				server = null
 			}
 		}
 		return serverPort
@@ -40,8 +47,11 @@ class PeerMessageRuntime(
 	fun port(): Int = serverPort
 
 	fun stopServer() {
+		server?.close()
+		server = null
 		serverJob?.cancel()
 		serverJob = null
+		serverPort = 0
 	}
 
 	private suspend fun accept(session: SessionTransport) {
@@ -54,12 +64,16 @@ class PeerMessageRuntime(
 	}
 
 	suspend fun send(endpoint: com.netless.transport.TransportEndpoint, conversationId: String, body: String) {
-		val peerKey = endpoint.metadata["identityKey"]?.let { PublicKey(java.util.Base64.getDecoder().decode(it)) }
+		endpoint.metadata["identityKey"]?.let { PublicKey(java.util.Base64.getDecoder().decode(it)) }
 			?: error("peer identity key is missing")
-		val host = wifiDiscovery?.connectPeer(endpoint) ?: endpoint.address
-		val connection = wifi.connectAuthenticated(TransportEndpoint(endpoint.nodeId, host, endpoint.metadata), 1, endpoint.metadata["sessionId"] ?: error("session id is missing"), identity.getOrCreateIdentity().publicKey, identity::sign, identity::verify)
-		connection.send(MessageFrame.encode(conversationId, body))
-		connection.close()
+		try {
+			val host = wifiDiscovery?.connectPeer(endpoint) ?: endpoint.address
+			val connection = wifi.connectAuthenticated(TransportEndpoint(endpoint.nodeId, host, endpoint.metadata), 1, endpoint.metadata["sessionId"] ?: error("session id is missing"), identity.getOrCreateIdentity().publicKey, identity::sign, identity::verify)
+			connection.send(MessageFrame.encode(conversationId, body))
+			connection.close()
+		} catch (error: java.io.IOException) {
+			throw IllegalStateException("peer connection failed", error)
+		}
 	}
 
 	fun receive(frame: ByteArray) {

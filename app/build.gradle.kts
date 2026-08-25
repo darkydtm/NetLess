@@ -24,6 +24,25 @@ android {
 	namespace = "com.netless.app"
 	compileSdk = 35
 
+	signingConfigs {
+		create("release") {
+			val file = providers.environmentVariable("NETLESS_KEYSTORE").orNull
+			if (file != null) {
+				storeFile = file(file)
+				storePassword = providers.environmentVariable("NETLESS_STORE_PASSWORD").orNull
+				keyAlias = providers.environmentVariable("NETLESS_KEY_ALIAS").orNull
+				keyPassword = providers.environmentVariable("NETLESS_KEY_PASSWORD").orNull
+			}
+		}
+	}
+	val hasReleaseSigning = providers.environmentVariable("NETLESS_KEYSTORE").isPresent &&
+		providers.environmentVariable("NETLESS_STORE_PASSWORD").isPresent &&
+		providers.environmentVariable("NETLESS_KEY_ALIAS").isPresent &&
+		providers.environmentVariable("NETLESS_KEY_PASSWORD").isPresent
+	buildTypes {
+		release { if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release") }
+	}
+
 	defaultConfig {
 		applicationId = "com.netless.app"
 		minSdk = 26
