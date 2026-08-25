@@ -1,6 +1,8 @@
 package com.netless.network
 
 import com.netless.common.NodeId
+import com.netless.transport.TransportEndpoint
+import com.netless.transport.TransportType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -68,6 +70,18 @@ class RouteTest {
 
 		assertEquals(route.nodes, nodes)
 		assertEquals(route.metrics, destructuredMetrics)
+	}
+
+	@Test
+	fun `validates hop edges and copy nodes`() {
+		val metrics = RouteMetrics(1.0, 1.0, 1.0, 1.0)
+		val hop = RouteHop(NodeId("a"), NodeId("b"), TransportType.Bluetooth, TransportEndpoint(NodeId("b"), "b"), metrics, 100L)
+
+		assertFailsWith<IllegalArgumentException> {
+			Route(listOf(NodeId("a"), NodeId("c")), metrics, hops = listOf(hop))
+		}
+		val route = Route(listOf(NodeId("a"), NodeId("b")), metrics, hops = listOf(hop))
+		assertFailsWith<IllegalArgumentException> { route.copy(nodes = listOf(NodeId("a"), NodeId("c"))) }
 	}
 
 }

@@ -49,6 +49,11 @@ class Route(
 		require(nodeValues.distinct().size == nodeValues.size) { "Route must not contain cycles" }
 		require(expiresAtMillis >= 0L) { "expiresAtMillis must be non-negative" }
 		require(hops.isEmpty() || hops.size == nodeValues.size - 1) { "hops must match route edges" }
+		hops.forEachIndexed { index, hop ->
+			require(hop.nodeId == nodeValues[index] && hop.nextNodeId == nodeValues[index + 1]) {
+				"hop must match route edge"
+			}
+		}
 	}
 
 	fun copy(nodes: List<NodeId> = this.nodes, metrics: RouteMetrics = this.metrics): Route =

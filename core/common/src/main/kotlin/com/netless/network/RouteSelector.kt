@@ -11,11 +11,14 @@ private const val HOP_PENALTY_WEIGHT = 0.05
 
 class RouteSelector(private val clock: () -> Long = { System.currentTimeMillis() }) {
 	fun select(routes: List<Route>, policy: TransferPolicy): Route? {
-		val now = clock()
+		return select(routes, policy, clock())
+	}
+
+	fun select(routes: List<Route>, policy: TransferPolicy, nowMillis: Long): Route? {
 		val candidates = routes.filter { route ->
 			route.nodes.size - 1 <= policy.maxHops &&
 			route.metrics.availability > 0.0 &&
-			route.expiresAtMillis > now
+			route.expiresAtMillis > nowMillis
 		}
 
 		return candidates.minWithOrNull(comparator(policy.mode))

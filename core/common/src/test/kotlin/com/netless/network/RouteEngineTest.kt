@@ -7,6 +7,7 @@ import com.netless.transport.TransportType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class RouteEngineTest {
 	private val engine = RouteEngine()
@@ -67,6 +68,57 @@ class RouteEngineTest {
 		)
 
 		assertEquals(TransportType.WifiDirect, route!!.hops.single().transport)
+	}
+
+	@Test
+	fun `valid route survives expired incoming hop`() {
+		val routes = graphOf(
+			hop("root", "a", TransportType.Bluetooth, expiresAt = 99L),
+			hop("a", "target", TransportType.WifiDirect),
+		).routesTo(target, 100L)
+
+		assertEquals(listOf(NodeId("a"), target), routes.single().nodes)
+	}
+
+	@Test
+	fun `traverses cyclic component without repeating nodes in a path`() {
+		val routes = graphOf(
+			hop("a", "b", TransportType.Bluetooth),
+			hop("b", "a", TransportType.Bluetooth),
+			hop("b", "target", TransportType.WifiDirect),
+		).routesTo(target, 100L)
+
+		assertTrue(routes.any { it.nodes == listOf(NodeId("a"), NodeId("b"), target) })
+		assertTrue(routes.all { it.nodes.distinct().size == it.nodes.size })
+	}
+
+	@Test
+	fun `engine passes caller time to selector`() {
+		val selector = RouteSelector { 1_000L }
+		val engine = RouteEngine(selector)
+
+		assertEquals(
+			TransportType.WifiDirect,
+			engine.select(
+				target,
+				graphOf(hop("a", "target", TransportType.WifiDirect, expiresAt = 100L)),
+				TransportPolicy.Automatic(),
+				0L,
+			)!!.hops.single().transport,
+		)
+	}
+
+	@Test
+	fun `graph and selector use the same hop limit`() {
+		val graph = RouteGraph(
+			listOf(
+				hop("a", "b", TransportType.Bluetooth),
+				hop("b", "target", TransportType.WifiDirect),
+			),
+			maxHops = 1,
+		)
+
+		assertNull(engine.select(target, graph, TransportPolicy.Automatic(), 100L))
 	}
 
 	private fun graphOf(vararg hops: RouteHop): RouteGraph = RouteGraph(hops.toList())

@@ -11,8 +11,38 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 	}
 
 	fun routesTo(destination: NodeId, nowMillis: Long): List<Route> {
-		val starts = outgoing.keys.filter { node -> outgoing.none { (_, edges) -> edges.any { it.nextNodeId == node } } }.sortedBy { it.value }
+		val activeHops = outgoing.values.flatten().filter { it.expiresAtMillis > nowMillis }
+		val nodes = (activeHops.flatMap { listOf(it.nodeId, it.nextNodeId) }).toSet()
+		val starts = nodesByComponent(activeHops, nodes).flatMap { component ->
+			val incoming = activeHops.filter { it.nextNodeId in component }.map { it.nextNodeId }.toSet()
+			val roots = component.filter { it !in incoming }
+			(if (roots.isEmpty()) component else roots).sortedBy { it.value }
+		}.sortedBy { it.value }
 		return starts.flatMap { start -> routesFrom(start, destination, nowMillis) }
+	}
+
+	val hopLimit: Int
+		get() = maxHops
+
+	private fun nodesByComponent(activeHops: List<RouteHop>, nodes: Set<NodeId>): List<Set<NodeId>> {
+		val adjacent = activeHops.flatMap { hop ->
+			listOf(hop.nodeId to hop.nextNodeId, hop.nextNodeId to hop.nodeId)
+		}.groupBy({ it.first }, { it.second })
+		val remaining = nodes.toMutableSet()
+		val components = mutableListOf<Set<NodeId>>()
+		while (remaining.isNotEmpty()) {
+			val component = mutableSetOf<NodeId>()
+			val queue = ArrayDeque<NodeId>()
+			queue += remaining.first()
+			while (queue.isNotEmpty()) {
+				val node = queue.removeFirst()
+				if (!component.add(node)) continue
+				remaining.remove(node)
+				adjacent[node].orEmpty().forEach { queue += it }
+			}
+			components += component
+		}
+		return components
 	}
 
 	private fun routesFrom(start: NodeId, destination: NodeId, nowMillis: Long): List<Route> {
