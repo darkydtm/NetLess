@@ -131,8 +131,14 @@ data class PacketEnvelope(
 	val forwarding: ForwardingEnvelope,
 	val content: ContentEnvelope,
 	val version: Int = CURRENT_PROTOCOL_VERSION,
+	val createdAtEpochMillis: Long = 0L,
+	val expiresAtEpochMillis: Long = Long.MAX_VALUE,
 ) : Serializable {
 	init {
 		require(version > 0) { "version must be positive" }
+		require(createdAtEpochMillis >= 0) { "createdAtEpochMillis must not be negative" }
+		require(expiresAtEpochMillis >= createdAtEpochMillis) {
+			"expiresAtEpochMillis must not be before createdAtEpochMillis"
+		}
 	}
 }

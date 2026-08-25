@@ -10,14 +10,14 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.StandardCharsets
 
-interface PacketCodec {
+private interface LegacyPacketCodec {
 	fun encode(packet: PacketEnvelope): ByteArray
 	fun decode(bytes: ByteArray): PacketEnvelope
 }
 
 class UnsupportedProtocolVersionException(message: String) : IllegalArgumentException(message)
 
-class BinaryPacketCodec : PacketCodec {
+class BinaryPacketCodec : LegacyPacketCodec {
 	private companion object {
 		const val MAGIC = 0x4E4C5031
 		const val MAX_STRING_BYTES = 65_536
