@@ -60,6 +60,10 @@ class KeystoreIdentityRepository internal constructor(
 		}
 	}
 
+	override suspend fun sign(data: ByteArray): Signature = crypto.sign(loadIdentity().privateKey, data)
+
+	override suspend fun verify(publicKey: PublicKey, data: ByteArray, signature: Signature): Boolean = crypto.verify(publicKey, data, signature)
+
 	private suspend fun loadIdentity(): StoredIdentity {
 		val stored = store.identity ?: crypto.generateIdentity().let { keyPair ->
 			StoredIdentity(
