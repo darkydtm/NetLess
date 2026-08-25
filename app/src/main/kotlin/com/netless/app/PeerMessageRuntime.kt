@@ -22,6 +22,7 @@ class PeerMessageRuntime(
 	private var serverJob: Job? = null
 	private var serverPort: Int = 0
 	private var server: ServerSocket? = null
+	private val sessionJobs = mutableSetOf<Job>()
 
 	fun startServer(scope: CoroutineScope, port: Int = 0): Int {
 		if (serverJob != null) return serverPort
@@ -32,7 +33,7 @@ class PeerMessageRuntime(
 				while (true) {
 					val session = SessionTransport(server!!.accept())
 					if (identityPublicKey != null && sign != null && verify != null) session.acceptAuthenticated(1, identityPublicKey, sign, verify)
-					launch { accept(session) }
+					sessionJobs += launch { accept(session) }
 				}
 			} catch (error: java.net.SocketException) {
 				if (isActive) throw error
@@ -50,6 +51,8 @@ class PeerMessageRuntime(
 		server?.close()
 		server = null
 		serverJob?.cancel()
+		sessionJobs.toList().forEach(Job::cancel)
+		sessionJobs.clear()
 		serverJob = null
 		serverPort = 0
 	}

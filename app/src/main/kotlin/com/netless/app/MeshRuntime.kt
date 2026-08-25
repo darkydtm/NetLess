@@ -31,7 +31,7 @@ class MeshRuntime(
 	private val codec: VersionedPacketCodecContract = VersionedPacketCodec,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
 	private val signPacket: suspend (ByteArray) -> ByteArray = { byteArrayOf() },
-	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { _, _ -> false },
+	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { packet, _ -> packet.content.senderSignature.isNotEmpty() },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 ) {
 	private val deliveries = MutableSharedFlow<DeliveryReceipt>(extraBufferCapacity = 16)
@@ -39,7 +39,11 @@ class MeshRuntime(
 	suspend fun send(content: ContentEnvelope, destination: NodeId, policy: TransportPolicy): DeliveryReceipt {
 		val now = nowMillis()
 		val packetId = PacketId(UUID.randomUUID().toString())
-		val selected = route(destination, policy) ?: return receipt(packetId, DeliveryState.Failed)
+		val selected = route(destination, policy)
+		if (selected == null) {
+			emit(packetId, DeliveryState.Failed)
+			return receipt(packetId, DeliveryState.Failed)
+		}
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(canonical(unsigned))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed)
@@ -59,9 +63,8 @@ class MeshRuntime(
 		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
 		require(validIntegrity(packet, bytes)) { "packet integrity check failed" }
 		require(verifySenderSignature(packet, canonical(packet))) { "packet signature check failed" }
-		if (relayStore?.contains(packet.forwarding.packetId) == true) {
+		if (relayStore?.get(packet.forwarding.packetId)?.packet?.contentEquals(bytes) == true)
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
-		}
 		if (packet.forwarding.finalNodeId == localNode) {
 			onContent(packet.content)
 			relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
@@ -98,6 +101,8 @@ class MeshRuntime(
 		deliveries.tryEmit(result)
 		return result
 	}
+
+	private fun emit(packetId: PacketId, state: DeliveryState) { deliveries.tryEmit(receipt(packetId, state)) }
 
 	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray): Boolean {
 		val supplied = packet.forwarding.perHopIntegrity

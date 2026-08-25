@@ -36,8 +36,10 @@ class AppContainer(application: Application) {
 	val discoveryTransport: DiscoveryTransport = AndroidBleDiscoveryTransport(application)
 	val wifiDirectDiscovery: DiscoveryTransport = WifiDirectDiscoveryTransport(application)
 	val wifiDirect = com.netless.transport.WifiDirectDataTransport()
-	val transportRegistry = TransportRegistry().also { it.register(wifiDirect.asAdapter()) }
 	private val localIdentity = identityRepository.getOrCreateIdentityBlocking()
+	val transportRegistry = TransportRegistry().also { it.register(wifiDirect.asAdapter(localIdentity.publicKey, { data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) })) }
+	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
+	val messages = MessageRepository(contentStore)
 	val meshRuntime = MeshRuntime(
 		com.netless.common.NodeId(localIdentity.profileId.value), transportRegistry,
 		{ destination, policy ->
@@ -55,10 +57,10 @@ class AppContainer(application: Application) {
 			val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
 			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), data, com.netless.crypto.Signature(content.senderSignature))
 		},
+		onContent = { content -> messages.onContent(content) },
 	)
-	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
-	val messages = MessageRepository(contentStore)
-	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport)
+	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
+		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) })
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
@@ -82,10 +84,10 @@ class AppContainer(application: Application) {
 	)
 }
 
-private fun com.netless.transport.WifiDirectDataTransport.asAdapter() = object : com.netless.transport.TransportAdapter {
+private fun com.netless.transport.WifiDirectDataTransport.asAdapter(identity: com.netless.crypto.PublicKey, sign: suspend (ByteArray) -> com.netless.crypto.Signature, verify: suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean) = object : com.netless.transport.TransportAdapter {
 	override val type = com.netless.transport.TransportType.WifiDirect
 	override val availability = state
-	override suspend fun connect(endpoint: com.netless.transport.TransportEndpoint) = this@asAdapter.connect(endpoint)
+	override suspend fun connect(endpoint: com.netless.transport.TransportEndpoint) = this@asAdapter.connectAuthenticated(endpoint, 1, UUID.randomUUID().toString(), identity, sign, verify)
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = capability == com.netless.transport.DiscoveryCapability.AcceptIncoming
 }
 

@@ -36,3 +36,14 @@ Verification: `git diff --check` passed. Gradle tests remain unavailable because
 - Packet signatures now cover canonical complete packet metadata and content with fail-closed verification rather than only event ID and payload.
 
 Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper and no system Gradle executable. Actual multi-instance runtime tests remain an environment-limited gap.
+
+## Latest Blocker Fixes
+
+- Corrected `ForwardingEnvelope.copy` so relays preserve the immutable destination while changing only current-hop metadata.
+- Wired authenticated `SessionTransport` establishment into the production Wi-Fi Direct adapter and passed identity signing and verification from `AppContainer`.
+- Connected mesh final-node content handoff to the conversation callback without decrypting in `MeshRuntime`.
+- Filtered unavailable, failed, and closed adapters before route graph construction and preserved fallback selection.
+- Tracked accepted session jobs and cancelled them during `PeerMessageRuntime.stopServer`.
+- Preserved failed and no-route packets in relay storage and emitted failure observations.
+
+Verification: `git diff --check` passed. No Gradle executable or wrapper is present, so Kotlin tests and the requested multi-instance two-hop transport tests could not run. Existing untracked workspace paths were not included.

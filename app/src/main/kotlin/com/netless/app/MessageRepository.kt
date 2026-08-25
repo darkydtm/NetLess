@@ -2,6 +2,7 @@ package com.netless.app
 
 import com.netless.content.DurableEncryptedContentStore
 import com.netless.content.Message
+import com.netless.protocol.ContentEnvelope
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
@@ -21,6 +22,8 @@ class MessageRepository(private val store: DurableEncryptedContentStore) {
 	fun messages(conversationId: String): List<Message> = ids.filterValues { it == conversationId }.keys.mapNotNull { id ->
 		store.get(id)?.let(::decode)
 	}
+
+	suspend fun onContent(content: ContentEnvelope) = Unit
 
 	private fun encode(message: Message): ByteArray = listOf(message.id, message.conversationId, message.body).joinToString("\u0000").toByteArray(StandardCharsets.UTF_8)
 

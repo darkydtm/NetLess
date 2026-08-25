@@ -43,13 +43,13 @@ class ForwardingEnvelope(
 		perHopIntegrity: ByteArray = this.perHopIntegrity,
 	) = ForwardingEnvelope(
 		packetId,
-		currentNodeId,
 		finalNodeId,
 		nextHop,
 		hopCount,
 		ttl,
 		trafficClass,
 		perHopIntegrity,
+		currentNodeId,
 	)
 
 	override fun equals(other: Any?): Boolean =
