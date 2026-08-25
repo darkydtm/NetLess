@@ -76,6 +76,18 @@ class MeshRuntimeTest {
 		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth) }.isFailure)
 	}
 
+	@Test
+	fun `receipt is not admitted for a final-node record`() = runTest {
+		val network = FakeNetwork()
+		val runtime = network.runtime()
+		network.relayStore.put(network.packet(), network.packetId, Long.MAX_VALUE, null)
+
+		assertTrue(runCatching {
+			runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth)
+		}.isFailure)
+		assertTrue(network.relayStore.contains(network.packetId))
+	}
+
 	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 }
 

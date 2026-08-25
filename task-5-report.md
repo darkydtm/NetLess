@@ -99,6 +99,13 @@ Verification: `git diff --check` passed. Gradle tests remain unavailable because
 
 Verification: `git diff --check` passed. Kotlin/Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. Focused multi-instance forged-ack and failure tests remain environment-limited.
 
+## Task 5 Minimal Fix
+
+- Receipt ingress now admits only pending relay records with a downstream next hop, and revalidates the stored packet id, immutable final destination, and terminal delivery state before emitting, forwarding, and deleting the record.
+- Added regression coverage for rejecting terminal receipts against final-node records; existing one-hop acknowledgement/receipt, forged/duplicate receipt, and missing-signature observation tests remain in place.
+
+Verification: Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. `git diff --check` is the available verification path.
+
 ## Task 5 High finding correction
 
 - Terminal receipt admission now loads the pending relay packet and requires the receipt node to equal the packet's immutable final destination.
