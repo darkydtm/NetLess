@@ -5,16 +5,21 @@ import com.netless.crypto.EphemeralKeyExchange
 import com.netless.crypto.KeyExchangeOffer
 import com.netless.crypto.PublicKey
 import javax.crypto.SecretKey
-import javax.crypto.spec.SecretKeySpec
-import java.security.MessageDigest
 
 class ConversationKeyRegistry(
 	private val verifyIdentity: (PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean,
+	private val store: DurableEncryptedContentStore? = null,
 ) {
 	private val keys = HashMap<String, SecretKey>()
 	private val sessions = HashSet<String>()
+	init { store?.ids()?.filter { it.startsWith("conversation-key:") }?.forEach { id -> store.get(id)?.let { keys[id.removePrefix("conversation-key:")] = javax.crypto.spec.SecretKeySpec(it, "AES") } } }
 
-	fun register(sessionId: String, key: SecretKey) { keys[sessionId] = key; sessions.add(sessionId) }
+	fun register(sessionId: String, key: SecretKey) {
+		require(sessionId.isNotBlank()) { "sessionId must not be blank" }
+		keys[sessionId] = key
+		sessions.add(sessionId)
+		store?.put("conversation-key:$sessionId", key.encoded)
+	}
 
 	fun establish(
 		offer: KeyExchangeOffer,
@@ -28,8 +33,6 @@ class ConversationKeyRegistry(
 		return local.derive(remotePublicKey, transcript).also { keys[offer.sessionId] = it }
 	}
 
-	fun key(sessionId: String): SecretKey = keys.getOrPut(sessionId) {
-		require(sessionId.isNotBlank()) { "sessionId must not be blank" }
-		MessageDigest.getInstance("SHA-256").digest(sessionId.toByteArray()).let { SecretKeySpec(it, "AES") }
-	}.also { sessions.add(sessionId) }
+	fun key(sessionId: String): SecretKey = keys[sessionId]
+		?: error("conversation key is not registered")
 }

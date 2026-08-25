@@ -21,3 +21,9 @@
 
 - Added versioned payload round-trip coverage and per-message delivery-state flows.
 - Send cancellation rethrows `CancellationException` and does not publish a terminal failure state.
+# Latest critical/high follow-up
+
+- Added durable encrypted conversation-key records and fail-closed lookup.
+- Persisted discovered identity metadata through the shared contact store and bound incoming content to a stored contact and matching conversation.
+
+Verification: `git diff --check` passed. Tests could not run because this checkout has no Gradle wrapper or system Gradle executable.

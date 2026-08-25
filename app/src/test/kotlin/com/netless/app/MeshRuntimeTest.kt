@@ -204,7 +204,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			node, TransportRegistry().also { registry -> transports.forEach { (type, peer) -> registry.register(NodeAdapter(type, node, peer, nodes, this, failDestination)) } },
 			{ _, _ -> Route(listOf(node, transports.first().second), RouteMetrics(1.0, 1.0, 1.0, 1.0), hops = listOf(RouteHop(node, transports.first().second, transports.first().first, endpoint(transports.first().first, transports.first().second), RouteMetrics(1.0, 1.0, 1.0, 1.0), Long.MAX_VALUE))) },
 			relayStore = store, signPacket = { sign(keys.getValue(node.value), it) }, verifySenderSignature = { packet, data ->
-				keys[packet.content.sender.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true
+				keys[packet.content.senderProfileId.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true
 			}, onContent = onContent,
 			localIdentity = keys.getValue(node.value), signSession = { signSession(keys.getValue(node.value), it) }, verifySession = { key, data, signature -> keys.values.any { it == key } && signSession(key, data) == signature }, nowMillis = { 1_000L }
 		)
@@ -221,7 +221,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			{ error("destination has no outbound route") },
 			relayStore = destinationStore,
 			signPacket = { sign(keys.getValue(destinationId.value), it) },
-			verifySenderSignature = { packet, data -> keys[packet.content.sender.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true },
+			verifySenderSignature = { packet, data -> keys[packet.content.senderProfileId.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true },
 			onContent = { received = it; contentDeliveries++ },
 			localIdentity = keys.getValue(destinationId.value),
 			signSession = { signSession(keys.getValue(destinationId.value), it) },

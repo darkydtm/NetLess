@@ -47,3 +47,10 @@ Implemented persistent conversation message and contact projections over `Durabl
 - Conversation sends now bridge to `MeshRuntime` with the selected transport policy instead of a permanent failed stub.
 - Legacy NUL-delimited records are decoded during conversation startup.
 - Incoming relay payloads remain opaque when signature verification or established conversation-key decryption fails.
+# Latest critical/high follow-up
+
+- Removed session-id key derivation and made conversation keys require explicit registration or durable encrypted storage.
+- Unified discovery contact persistence with the application content store and rejected opaque pending content in `MessageRepository`.
+- Added blank sender validation, authorized incoming sender/conversation checks, and first-contact conversation selection.
+
+Verification: `git diff --check` passed. Tests could not run because this checkout has no Gradle wrapper or system Gradle executable. Full requested integration coverage remains unverified.

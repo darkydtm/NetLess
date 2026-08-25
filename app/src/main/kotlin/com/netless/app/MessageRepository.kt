@@ -27,7 +27,7 @@ class MessageRepository(private val store: DurableEncryptedContentStore) {
 
 	@Synchronized
 	suspend fun onContent(content: ContentEnvelope) {
-		store.put("pending:${content.eventId}", content.encryptedPayload)
+		error("MessageRepository does not accept opaque content")
 	}
 
 	private fun encode(message: Message): ByteArray = listOf(message.id, message.conversationId, message.body).joinToString("\u0000").toByteArray(StandardCharsets.UTF_8)

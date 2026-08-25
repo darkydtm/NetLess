@@ -51,7 +51,10 @@ class MessengerViewModel(
 	fun draftChanged(text: String) = _uiState.update { it.copy(draft = text) }
 
 	fun addContact(profileId: String, displayName: String) {
-		repository?.addContact(profileId.trim(), displayName.trim())
+		val id = profileId.trim()
+		val name = displayName.trim()
+		repository?.addContact(id, name)
+		_uiState.update { state -> state.copy(currentTab = MessengerTab.Chats, selectedConversation = id, conversations = (state.conversations + ConversationUiState(id, name)).distinctBy { it.id }) }
 	}
 
 	fun addContactText(value: String) {

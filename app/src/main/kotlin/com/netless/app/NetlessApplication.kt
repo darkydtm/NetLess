@@ -35,7 +35,6 @@ class NetlessApplication : Application() {
 
 class AppContainer(application: Application) {
 	val identityRepository: IdentityRepository = KeystoreIdentityRepository(application)
-	val contacts = ContactStore()
 	val discoveryTransport: DiscoveryTransport = AndroidBleDiscoveryTransport(application)
 	val wifiDirectDiscovery: DiscoveryTransport = WifiDirectDiscoveryTransport(application)
 	val wifiDirect = com.netless.transport.WifiDirectDataTransport()
@@ -47,7 +46,8 @@ class AppContainer(application: Application) {
 		javax.crypto.spec.SecretKeySpec(databaseKeyStore.unprotect(wrapped), "AES")
 	}
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher(storageKey))
-	private val conversationKeys = ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }
+	val contacts = ContactStore(contentStore)
+	private val conversationKeys = ConversationKeyRegistry({ key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }, contentStore)
 	private val contentCipher = ConversationContentCipher(conversationKeys)
 	lateinit var conversations: ConversationRepository
 	lateinit var meshRuntime: MeshRuntime

@@ -16,7 +16,7 @@ import java.io.DataOutputStream
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 
-data class Contact(val profileId: String, val displayName: String, val endpoint: String? = null)
+data class Contact(val profileId: String, val displayName: String, val endpoint: String? = null, val identityKey: String? = null)
 data class ChatMessage(val id: String, val conversationId: String, val body: String, val timestamp: Long, val deliveryState: DeliveryState, val read: Boolean = true)
 data class ConversationSummary(val conversationId: String, val contactProfileId: String, val lastMessagePreview: String, val timestamp: Long, val unreadCount: Int, val deliveryState: DeliveryState)
 sealed interface SendPolicy {
@@ -49,6 +49,7 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
 	suspend fun onIncomingContent(content: ContentEnvelope) {
 		val payload = runCatching { ConversationMessagePayload.decode(content.encryptedPayload) }.getOrNull() ?: return
+		require(contacts[content.senderProfileId.value] != null && payload.conversationId == content.senderProfileId.value) { "sender is not authorized for conversation" }
 		require(content.recipients.any { it.value == payload.conversationId }) { "content recipient is not the conversation" }
 		require(payload.messageId == content.eventId) { "content message id does not match event id" }
 		require(messages[payload.messageId] == null) { "duplicate message id" }
@@ -66,6 +67,6 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	private fun publish() { state.value = messages.values.toList(); conversationState.value = messages.values.groupBy { it.conversationId }.map { (id, values) -> values.maxBy { it.timestamp }.let { ConversationSummary(id, contacts[id]?.profileId ?: id, it.body, it.timestamp, values.count { !it.read }, it.deliveryState) } } }
 	private fun encode(m: ChatMessage) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(m.id); writeUTF(m.conversationId); writeUTF(m.body); writeLong(m.timestamp); writeUTF(m.deliveryState.name); writeBoolean(m.read) } }.toByteArray()
 	private fun decode(b: ByteArray): ChatMessage = DataInputStream(ByteArrayInputStream(b)).use { input -> ChatMessage(input.readUTF(), input.readUTF(), input.readUTF(), input.readLong(), input.readUTF().let(DeliveryState::valueOf), input.readBoolean()).also { require(input.available() == 0) } }
-	private fun encode(c: Contact) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(c.profileId); writeUTF(c.displayName); writeBoolean(c.endpoint != null); if (c.endpoint != null) writeUTF(c.endpoint) } }.toByteArray()
-	private fun decodeContact(b: ByteArray): Contact { val input = DataInputStream(ByteArrayInputStream(b)); return Contact(input.readUTF(), input.readUTF(), if (input.readBoolean()) input.readUTF() else null) }
+	private fun encode(c: Contact) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(c.profileId); writeUTF(c.displayName); writeBoolean(c.endpoint != null); if (c.endpoint != null) writeUTF(c.endpoint); writeBoolean(c.identityKey != null); if (c.identityKey != null) writeUTF(c.identityKey) } }.toByteArray()
+	private fun decodeContact(b: ByteArray): Contact { val input = DataInputStream(ByteArrayInputStream(b)); return Contact(input.readUTF(), input.readUTF(), if (input.readBoolean()) input.readUTF() else null, if (input.readBoolean()) input.readUTF() else null) }
 }

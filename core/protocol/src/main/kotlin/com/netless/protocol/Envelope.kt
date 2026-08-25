@@ -95,6 +95,7 @@ class ContentEnvelope(
 
 	init {
 		require(eventId.isNotBlank()) { "eventId must not be blank" }
+		require(senderProfileId.value.isNotBlank()) { "senderProfileId must not be blank" }
 		require(this.recipients.isNotEmpty()) { "recipients must not be empty" }
 		require(this.recipients.distinct().size == this.recipients.size) { "recipients must be unique" }
 		require(encryptedPayloadValue.isNotEmpty()) { "encryptedPayload must not be empty" }
