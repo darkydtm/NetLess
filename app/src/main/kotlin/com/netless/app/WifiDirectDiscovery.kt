@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pDeviceList
 import android.net.wifi.p2p.WifiP2pManager
+import android.net.wifi.p2p.WifiP2pConfig
 import com.netless.common.NodeId
 import com.netless.transport.DiscoveredNode
 import com.netless.transport.DiscoveryAdvertisement
@@ -16,6 +17,9 @@ import com.netless.transport.TransportCapabilities
 import com.netless.transport.TransportEndpoint
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @SuppressLint("MissingPermission")
 class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTransport {
@@ -59,6 +63,24 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 	}
 
 	override suspend fun advertise(advertisement: DiscoveryAdvertisement) = Unit
+
+	suspend fun connectPeer(endpoint: TransportEndpoint): String {
+		val wifiManager = manager ?: error("Wi-Fi Direct unavailable")
+		val channel = wifiChannel ?: error("Wi-Fi Direct channel unavailable")
+		val address = endpoint.address
+		wifiManager.connect(channel, WifiP2pConfig().apply { deviceAddress = address }, actionResult())
+		return suspendCancellableCoroutine { continuation ->
+			wifiManager.requestConnectionInfo(channel) { info ->
+				val host = info.groupOwnerAddress?.hostAddress
+				if (host != null) continuation.resume(host) else continuation.resumeWithException(IllegalStateException("Wi-Fi Direct group is not ready"))
+			}
+		}
+	}
+
+	private fun actionResult() = object : WifiP2pManager.ActionListener {
+		override fun onSuccess() = Unit
+		override fun onFailure(reason: Int) = Unit
+	}
 
 	private fun WifiP2pDevice.toDiscoveredNode() = DiscoveredNode(
 		NodeId(deviceAddress),
