@@ -33,8 +33,15 @@ class PeerMessageRuntime(
 			try {
 				while (true) {
 					val session = SessionTransport(server!!.accept())
-					if (identityPublicKey != null && sign != null && verify != null) session.acceptAuthenticated(1, identityPublicKey, sign, verify)
-					sessionJobs += launch { accept(session) }
+					sessionJobs += launch {
+						try {
+							require(identityPublicKey != null && sign != null && verify != null) { "authenticated session configuration is required" }
+							session.acceptAuthenticated(1, identityPublicKey!!, sign!!, verify!!)
+							accept(session)
+						} catch (_: Exception) {
+							session.close()
+						} finally { sessionJobs.removeIf { it.isCompleted } }
+					}
 				}
 			} catch (error: java.net.SocketException) {
 				if (isActive) throw error

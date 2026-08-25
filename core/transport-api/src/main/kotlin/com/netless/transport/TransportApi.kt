@@ -97,6 +97,8 @@ interface DataTransport {
 }
 
 interface TransportConnection {
+	val peerIdentity: com.netless.crypto.PublicKey?
+		get() = null
 	val incomingPackets: Flow<ByteArray>
 
 	suspend fun send(packet: ByteArray)

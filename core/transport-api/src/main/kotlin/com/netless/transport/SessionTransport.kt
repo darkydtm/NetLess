@@ -19,6 +19,10 @@ class SessionTransport(private val socket: Socket) {
 	private val output = DataOutputStream(socket.getOutputStream())
 	private var negotiatedKey: SecretKey? = null
 	private var authenticatedSessionId: String? = null
+	private var peerIdentityKey: PublicKey? = null
+
+	val peerIdentity: PublicKey?
+		get() = peerIdentityKey
 
 	suspend fun close() = socket.close()
 
@@ -52,6 +56,7 @@ class SessionTransport(private val socket: Socket) {
 			throw SecurityException("session identity signature failed")
 		}
 		return local.derive(remote.ephemeralPublicKey, EphemeralKeyExchange.transcript(local.publicKey, remote.ephemeralPublicKey, sessionId)).also {
+			peerIdentityKey = remote.identityPublicKey
 			negotiatedKey = it
 			authenticatedSessionId = sessionId
 		}
@@ -72,6 +77,7 @@ class SessionTransport(private val socket: Socket) {
 		val offer = KeyExchangeOffer(remote.sessionId, local.publicKey, identityPublicKey, sign(exchangePayload(remote.sessionId, local.publicKey, identityPublicKey)))
 		writeOffer(protocolVersion, offer)
 		return local.derive(remote.ephemeralPublicKey, EphemeralKeyExchange.transcript(local.publicKey, remote.ephemeralPublicKey, remote.sessionId)).also {
+			peerIdentityKey = remote.identityPublicKey
 			negotiatedKey = it
 			authenticatedSessionId = remote.sessionId
 		}

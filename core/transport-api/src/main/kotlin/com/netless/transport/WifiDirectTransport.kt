@@ -15,12 +15,13 @@ class WifiDirectDataTransport : DataTransport {
 	override val type = TransportType.WifiDirect
 	private val _state = MutableStateFlow(TransportState.Idle)
 	override val state: Flow<TransportState> = _state.asStateFlow()
+	fun markFailed() { _state.value = TransportState.Failed }
 
 	override suspend fun connect(endpoint: TransportEndpoint): TransportConnection {
 		val port = endpoint.metadata["port"]?.toIntOrNull()
 		require(port != null && port in 1..65535) { "Wi-Fi Direct endpoint must contain a valid port" }
 		_state.value = TransportState.Connecting
-		val socket = Socket().apply { connect(InetSocketAddress(endpoint.address, port)) }
+		val socket = try { Socket().apply { connect(InetSocketAddress(endpoint.address, port)) } } catch (error: Exception) { _state.value = TransportState.Failed; throw error }
 		_state.value = TransportState.Connected
 		return WifiDirectConnection(socket)
 	}
@@ -38,7 +39,7 @@ class WifiDirectDataTransport : DataTransport {
 		_state.value = TransportState.Connecting
 		val socket = Socket().apply { connect(InetSocketAddress(endpoint.address, port)) }
 		val session = SessionTransport(socket)
-		session.establishAuthenticated(protocolVersion, sessionId, identityPublicKey, sign, verify)
+		try { session.establishAuthenticated(protocolVersion, sessionId, identityPublicKey, sign, verify) } catch (error: Exception) { markFailed(); session.close(); throw error }
 		_state.value = TransportState.Connected
 		return SessionConnection(session)
 	}

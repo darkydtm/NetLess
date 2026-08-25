@@ -35,7 +35,7 @@ class MeshRuntime(
 	private val codec: VersionedPacketCodecContract = VersionedPacketCodec,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
 	private val signPacket: suspend (ByteArray) -> ByteArray = { byteArrayOf() },
-	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { packet, _ -> packet.content.senderSignature.isNotEmpty() },
+	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { _, _ -> false },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 ) {
 	private val deliveries = mutableMapOf<PacketId, MutableStateFlow<DeliveryReceipt?>>()
@@ -108,6 +108,8 @@ class MeshRuntime(
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
+				val expectedKey = hop.endpoint.metadata["identityKey"]?.let { com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(it)) }
+				require(expectedKey != null && connection.peerIdentity?.encoded?.contentEquals(expectedKey.encoded) == true) { "session identity does not match endpoint" }
 				connection.send(ControlCodec.forward(bytes))
 				val acknowledgement = connection.incomingPackets.first()
 				val ack = ControlCodec.decode(acknowledgement)
@@ -115,6 +117,7 @@ class MeshRuntime(
 				relayStore?.markDelivered(packetId)
 				connection.close()
 			} catch (error: Exception) {
+				try { adapter.fail() } catch (_: Exception) { }
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}
 		val result = receipt(packetId, DeliveryState.Relaying)

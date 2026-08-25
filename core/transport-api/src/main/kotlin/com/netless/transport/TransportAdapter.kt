@@ -9,4 +9,5 @@ interface TransportAdapter {
 	suspend fun connect(endpoint: TransportEndpoint): TransportConnection
 
 	fun supports(capability: DiscoveryCapability): Boolean
+	fun fail() { }
 }

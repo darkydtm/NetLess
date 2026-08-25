@@ -57,6 +57,15 @@ Verification: `git diff --check` passed. Kotlin/Gradle verification was unavaila
 
 Verification: `git diff --check` passed. No Gradle executable or wrapper is present, so Kotlin tests and the requested multi-instance two-hop transport tests could not run. Existing untracked workspace paths were not included.
 
+## Latest audit follow-up
+
+- Authenticated sessions now expose the peer public key; endpoint metadata is checked against it before packet forwarding and acknowledgement acceptance.
+- MeshRuntime verification fails closed without an explicit verifier, and failed Wi-Fi Direct attempts transition to `Failed`.
+- Incoming handshakes run in isolated child jobs; failed sessions close without stopping the accept loop, and completed jobs are removed.
+- ControlCodec bounds frames and text, rejects truncation, invalid status values, and trailing bytes.
+
+Verification: `git diff --check` passed. Kotlin tests could not run because this checkout has no Gradle wrapper and no system Gradle executable. The requested focused regression tests remain unexecuted in this environment.
+
 ## Task 5 continuation
 
 - Added a versioned control-frame codec for packet forwarding and `HopAcknowledgement`; legacy packet codecs remain unchanged.

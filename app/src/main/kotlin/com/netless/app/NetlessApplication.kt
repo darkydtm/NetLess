@@ -91,6 +91,7 @@ private fun com.netless.transport.WifiDirectDataTransport.asAdapter(identity: co
 	override val availability = state
 	override suspend fun connect(endpoint: com.netless.transport.TransportEndpoint) = this@asAdapter.connectAuthenticated(endpoint, 1, UUID.randomUUID().toString(), identity, sign, verify)
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = capability == com.netless.transport.DiscoveryCapability.AcceptIncoming
+	override fun fail() = this@asAdapter.markFailed()
 }
 
 private fun IdentityRepository.getOrCreateIdentityBlocking() = kotlinx.coroutines.runBlocking { getOrCreateIdentity() }

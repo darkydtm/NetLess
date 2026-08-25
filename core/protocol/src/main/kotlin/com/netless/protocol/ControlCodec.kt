@@ -12,6 +12,8 @@ object ControlCodec {
 	private const val VERSION = 1
 	private const val FORWARD = 1
 	private const val ACK = 2
+	private const val MAX_FRAME = 4 * 1024 * 1024
+	private const val MAX_TEXT = 1024
 
 	fun forward(packet: ByteArray): ByteArray = frame(FORWARD, packet)
 
@@ -22,16 +24,20 @@ object ControlCodec {
 		}
 	}.toByteArray()
 
-	fun decode(bytes: ByteArray): ControlFrame = DataInputStream(ByteArrayInputStream(bytes)).use {
-		require(it.readInt() == MAGIC) { "invalid control frame" }
-		require(it.readInt() == VERSION) { "unsupported control version" }
-		when (it.readInt()) {
-			FORWARD -> Forward(it.readNBytes(it.readInt()))
-			ACK -> it.readUTF().let { packetId ->
-				Acknowledgement(HopAcknowledgement(PacketId(packetId), NodeId(it.readUTF()), it.readInt() == 0))
+	fun decode(bytes: ByteArray): ControlFrame {
+		require(bytes.size <= MAX_FRAME) { "control frame too large" }
+		val input = DataInputStream(ByteArrayInputStream(bytes))
+		val frame = when {
+			input.readInt() != MAGIC -> error("invalid control frame")
+			input.readInt() != VERSION -> error("unsupported control version")
+			else -> when (input.readInt()) {
+				FORWARD -> input.readInt().let { size -> require(size in 0..MAX_FRAME && size <= input.available()) { "invalid control payload length" }; Forward(input.readNBytes(size)) }
+				ACK -> input.readUTF().let { packetId -> require(packetId.length <= MAX_TEXT); val node = input.readUTF(); require(node.length <= MAX_TEXT); val status = input.readInt(); require(status == 0 || status == 1); Acknowledgement(HopAcknowledgement(PacketId(packetId), NodeId(node), status == 0)) }
+				else -> error("unknown control frame")
 			}
-			else -> error("unknown control frame")
 		}
+		require(input.available() == 0) { "trailing control bytes" }
+		return frame
 	}
 
 	private fun frame(type: Int, payload: ByteArray) = ByteArrayOutputStream().also {
