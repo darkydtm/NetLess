@@ -15,6 +15,7 @@ dependencies {
 	implementation("androidx.compose.material3:material3")
 	implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:${libs.versions.lifecycle.get()}")
 	implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
+	implementation("androidx.core:core-ktx:1.15.0")
 	testImplementation(kotlin("test"))
 	testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test-jvm:1.9.0")
 }

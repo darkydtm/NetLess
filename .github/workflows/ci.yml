@@ -34,3 +34,4 @@ jobs:
         with:
           gradle-version: "8.9"
       - run: gradle --no-daemon --stacktrace assembleDebug test
+      - run: gradle --no-daemon --stacktrace assembleRelease
