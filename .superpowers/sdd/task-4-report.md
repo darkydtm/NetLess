@@ -182,4 +182,4 @@ Focused Kotlin tests could not run because the repository has no Gradle wrapper 
 
 ### Commit
 
-Pending commit for the remaining Task 4 findings.
+`395d81a fix remaining relay store review findings`
