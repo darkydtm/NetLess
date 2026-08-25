@@ -224,12 +224,14 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)
 	private fun signSession(key: PublicKey, data: ByteArray) = Signature(sign(key, data))
 
-	private fun endpoint(type: TransportType, node: NodeId) = TransportEndpoint(node, type.name, mapOf("nodeId" to node.value, "identityKey" to Base64.getEncoder().encodeToString(keys.getValue(node.value).encoded)))
+	private fun endpoint(type: TransportType, node: NodeId) = TransportEndpoint(node, type.name, mapOf("nodeId" to node.value, "identityKey" to Base64.getEncoder().encodeToString(keys.getValue(node.value).encoded), "sessionId" to "${type.name}:${node.value}"))
 
 	private class NodeAdapter(override val type: TransportType, private val local: NodeId, private val peer: NodeId, private val nodes: Map<NodeId, () -> MeshRuntime>, private val network: ThreeNodeNetwork, private val fail: Boolean) : TransportAdapter {
 		override val availability = MutableStateFlow(TransportState.Idle)
 		override suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest): TransportConnection {
 			require(endpoint.nodeId == peer && request.expectedPeerIdentity == network.keys.getValue(peer.value))
+			require(request.sessionId == "${type.name}:${peer.value}")
+			require(request.protocolVersion == 1)
 			network.usedTransports += type
 			return object : TransportConnection {
 				override val peerIdentity = network.keys.getValue(peer.value)
@@ -295,6 +297,7 @@ private class FakeNetwork {
 	private fun endpoint(type: TransportType, node: String) = TransportEndpoint(NodeId(node), type.name, mapOf(
 		"nodeId" to node,
 		"identityKey" to Base64.getEncoder().encodeToString(identityKey.encoded),
+		"sessionId" to "${type.name}:$node",
 	))
 	private fun metrics() = RouteMetrics(1.0, 1.0, 1.0, 1.0)
 }
@@ -316,7 +319,12 @@ private class FakeAdapter(override val type: TransportType, private val network:
 			}
 			 override suspend fun close() = Unit
 				private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
-		 }
+		}
+	}
+	override suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest): TransportConnection {
+		require(request.expectedPeerIdentity == network.identityKey)
+		require(request.sessionId == "${type.name}:${endpoint.nodeId.value}" && request.protocolVersion == 1)
+		return connect(endpoint)
 	}
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = true
 }

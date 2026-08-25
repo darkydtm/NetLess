@@ -296,6 +296,7 @@ class RelayStore(
 		val size = input.readInt()
 		require(size in 1..MAX_PACKET_BYTES) { "invalid packet size" }
 		val packet = ByteArray(size).also(input::readFully)
+		require(input.read() == -1) { "trailing relay packet bytes" }
 		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, finalDestination, if (receipt == null) RelayState.PENDING else RelayState.TERMINAL, receipt)
 	}
 }

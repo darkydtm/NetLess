@@ -314,6 +314,40 @@ class RelayStoreTest {
 			file.delete()
 		}
 	}
+
+	@Test
+	fun ignoresPersistedPacketWithTrailingBytes() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
+			val value = ByteArrayOutputStream().use { bytes ->
+				DataOutputStream(bytes).use { output ->
+					output.writeUTF(packetId.value)
+					output.writeLong(100L)
+					output.writeBoolean(false)
+					output.writeBoolean(false)
+					output.writeBoolean(false)
+					output.writeInt(1)
+					output.writeByte(1)
+					output.writeByte(2)
+				}
+				bytes.toByteArray()
+			}
+			val protected = keyStore.protect(value)
+			DataOutputStream(file.outputStream()).use { output ->
+				output.writeInt(1)
+				output.writeUTF("relay:${packetId.value}")
+				output.writeLong(100L)
+				output.writeBoolean(true)
+				output.writeInt(protected.size)
+				output.write(protected)
+			}
+
+			assertEquals(0, RelayStore(keyStore, file, nowMillis = { 0L }).count())
+		} finally {
+			file.delete()
+		}
+	}
 }
 
 private class RecordingKeyWrapper : KeyWrapper {
