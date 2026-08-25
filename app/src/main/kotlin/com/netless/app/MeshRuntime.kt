@@ -30,8 +30,8 @@ class MeshRuntime(
 	private val relayStore: RelayStore? = null,
 	private val codec: VersionedPacketCodecContract = VersionedPacketCodec,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
-	private val signPacket: suspend (PacketEnvelope) -> ByteArray = { byteArrayOf() },
-	private val verifySenderSignature: suspend (ContentEnvelope) -> Boolean = { false },
+	private val signPacket: suspend (ByteArray) -> ByteArray = { byteArrayOf() },
+	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { _, _ -> false },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 ) {
 	private val deliveries = MutableSharedFlow<DeliveryReceipt>(extraBufferCapacity = 16)
@@ -41,7 +41,7 @@ class MeshRuntime(
 		val packetId = PacketId(UUID.randomUUID().toString())
 		val selected = route(destination, policy) ?: return receipt(packetId, DeliveryState.Failed)
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
-		val signature = signPacket(unsigned)
+		val signature = signPacket(canonical(unsigned))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
 		val integrityInput = signed.copy(
@@ -58,7 +58,7 @@ class MeshRuntime(
 		val packet = codec.decode(bytes, now)
 		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
 		require(validIntegrity(packet, bytes)) { "packet integrity check failed" }
-		require(verifySenderSignature(packet.content)) { "packet signature check failed" }
+		require(verifySenderSignature(packet, canonical(packet))) { "packet signature check failed" }
 		if (relayStore?.contains(packet.forwarding.packetId) == true) {
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
 		}
@@ -108,6 +108,11 @@ class MeshRuntime(
 		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(blank, packet.createdAtEpochMillis))
 		return supplied.contentEquals(expected)
 	}
+
+	private fun canonical(packet: PacketEnvelope): ByteArray = codec.encode(packet.copy(
+		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+		content = packet.content.copy(senderSignature = byteArrayOf(0)),
+	), packet.createdAtEpochMillis)
 
 	private fun receipt(packetId: PacketId, state: DeliveryState) = DeliveryReceipt(packetId, state, localNode, nowMillis())
 }

@@ -49,10 +49,11 @@ class AppContainer(application: Application) {
 			RouteEngine().select(destination, RouteGraph(hops), policy, System.currentTimeMillis())
 		},
 		RelayStore(storageFile = java.io.File(application.filesDir, "relay.db")),
-		signPacket = { packet -> identityRepository.sign(packet.content.encryptedPayload + packet.content.eventId.encodeToByteArray()).bytes },
-		verifySenderSignature = { content ->
+		signPacket = { data -> identityRepository.sign(data).bytes },
+		verifySenderSignature = { packet, data ->
+			val content = packet.content
 			val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
-			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), content.encryptedPayload + content.eventId.encodeToByteArray(), com.netless.crypto.Signature(content.senderSignature))
+			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), data, com.netless.crypto.Signature(content.senderSignature))
 		},
 	)
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())

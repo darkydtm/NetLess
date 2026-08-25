@@ -26,3 +26,13 @@ Known boundary:
 - Adapter lookup now exposes availability-aware selection support.
 
 Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The requested actual multi-instance runtime tests could not be executed in this environment.
+
+## Final Task 5 review follow-up
+
+- Forwarding envelopes now carry the current node and are rewritten for each relay; the versioned codec preserves this metadata while legacy constructor/codec paths remain available.
+- Added an explicit `HopAcknowledgement` protocol type and retained relay records through transmission; final delivery invokes the opaque `onContent` callback and emits delivery observations for success and failure.
+- Restored authenticated `SessionTransport` acceptance in `PeerMessageRuntime` without changing its existing packet callback, server lifecycle, or packet send/receive API.
+- Production adapter lookup filters unavailable, failed, and closed adapters before route connection attempts; BLE remains discovery-only.
+- Packet signatures now cover canonical complete packet metadata and content with fail-closed verification rather than only event ID and payload.
+
+Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper and no system Gradle executable. Actual multi-instance runtime tests remain an environment-limited gap.
