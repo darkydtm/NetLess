@@ -35,23 +35,12 @@ import com.netless.transport.DiscoveredNode
 
 @Composable
 fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
-	val state by viewModel.uiState.collectAsStateWithLifecycle()
 	val contacts by container.contacts.contacts.collectAsState()
-	var message by remember { mutableStateOf("") }
-	var messages by remember { mutableStateOf(container.messages.messages("default")) }
+	val messengerViewModel = remember { MessengerViewModel() }
 	LaunchedEffect(container) {
 		container.runtimeController.startDiscovery()
 	}
-	when {
-		state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading profile" })
-		else -> ProfileScreen(state, contacts, messages, message, { message = it }, {
-			if (message.isNotBlank()) {
-				container.messages.send("default", message)
-				messages = container.messages.messages("default")
-				message = ""
-			}
-		}, viewModel::nameChanged, viewModel::bioChanged, viewModel::save)
-	}
+	MessengerShell(messengerViewModel, viewModel, contacts)
 }
 
 @Composable
