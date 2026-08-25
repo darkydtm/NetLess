@@ -114,6 +114,13 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 gate blocker
+
+- Unified per-hop integrity canonicalization for origin signing, relay rewrites, and destination validation; all paths blank `perHopIntegrity` and `senderSignature` consistently and use the captured packet clock value.
+- Added regression coverage proving a packet survives one relay rewrite and validates at the destination without changing receipt or authentication handling.
+
+Verification: `git diff --check` passed. Kotlin tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 audit blockers
 
 - Threaded one captured clock value through packet signing, per-hop integrity, codec encoding/decoding, and forwarding response validation so relay and destination use the same canonical packet timestamp and fields; removed the undefined `now` reference in `forward`.

@@ -30,6 +30,7 @@ import com.netless.crypto.PublicKey
 import com.netless.crypto.Signature
 import com.netless.database.RelayStore
 import java.util.Base64
+import java.security.MessageDigest
 
 class MeshRuntimeTest {
 	@Test
@@ -88,6 +89,22 @@ class MeshRuntimeTest {
 		assertTrue(network.relayStore.contains(network.packetId))
 	}
 
+	@Test
+	fun `relay rewrite preserves integrity for destination validation`() = runTest {
+		val network = FakeNetwork()
+		val packet = com.netless.protocol.PacketEnvelope(
+			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("relay"), NodeId("relay"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
+			content().copy(senderSignature = byteArrayOf(9)), createdAtEpochMillis = 100, expiresAtEpochMillis = Long.MAX_VALUE,
+		)
+		val now = 1000L
+		val input = packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)), content = packet.content.copy(senderSignature = byteArrayOf(0)))
+		val bytes = com.netless.protocol.VersionedPacketCodec.encode(packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = MessageDigest.getInstance("SHA-256").digest(com.netless.protocol.VersionedPacketCodec.encode(input, now)))))
+
+		network.runtime(NodeId("relay"), now).receive(bytes, TransportType.Bluetooth)
+		val destination = network.runtime(NodeId("destination"), now, relayStore = null)
+		assertEquals(DeliveryState.Delivered, destination.receive(network.forwardedPacket!!, TransportType.WifiDirect).state)
+	}
+
 	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 }
 
@@ -97,18 +114,21 @@ private class FakeNetwork {
 	val relayStore = RelayStore()
 	private val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
-	fun runtime(verifySignature: suspend (com.netless.protocol.PacketEnvelope, ByteArray) -> Boolean = { _, _ -> true }) = MeshRuntime(
-		NodeId("local"),
+	var forwardedPacket: ByteArray? = null
+
+	fun runtime(local: NodeId = NodeId("local"), now: Long = 1000L, verifySignature: suspend (com.netless.protocol.PacketEnvelope, ByteArray) -> Boolean = { _, _ -> true }, relayStore: RelayStore? = this.relayStore) = MeshRuntime(
+		local,
 		TransportRegistry().also { registry ->
 			registry.register(FakeAdapter(TransportType.Bluetooth, this))
 			registry.register(FakeAdapter(TransportType.WifiDirect, this))
 		},
 		{ destination, policy ->
+			val next = if (local == NodeId("relay")) destination else NodeId("relay")
+			val transport = if (local == NodeId("relay")) TransportType.WifiDirect else TransportType.Bluetooth
 			val hops = listOf(
-				RouteHop(NodeId("local"), NodeId("relay"), TransportType.Bluetooth, endpoint(TransportType.Bluetooth, "relay"), metrics(), Long.MAX_VALUE),
-				RouteHop(NodeId("relay"), destination, TransportType.WifiDirect, endpoint(TransportType.WifiDirect, "destination"), metrics(), Long.MAX_VALUE),
+				RouteHop(local, next, transport, endpoint(transport, next.value), metrics(), Long.MAX_VALUE),
 			)
-			Route(listOf(NodeId("local"), NodeId("relay"), destination), metrics(), hops = hops)
+			Route(listOf(local, next), metrics(), hops = hops)
 		},
 		relayStore = relayStore,
 		signPacket = { byteArrayOf(9) },
@@ -116,6 +136,7 @@ private class FakeNetwork {
 		localIdentity = identityKey,
 		signSession = { Signature(byteArrayOf(9)) },
 		verifySession = { _, _, _ -> true },
+		nowMillis = { now },
 	)
 
 	val packetId = com.netless.common.PacketId("packet")
@@ -140,7 +161,8 @@ private class FakeAdapter(override val type: TransportType, private val network:
 			override val peerIdentity: PublicKey = network.identityKey
 			override val incomingPackets: kotlinx.coroutines.flow.Flow<ByteArray>
 				get() = incoming
-			override suspend fun send(packet: ByteArray) {
+				override suspend fun send(packet: ByteArray) {
+				network.forwardedPacket = (ControlCodec.decode(packet) as Forward).packet
 				val forwarded = ControlCodec.decode(packet) as Forward
 				val decoded = com.netless.protocol.VersionedPacketCodec.decode(forwarded.packet)
 				incoming = kotlinx.coroutines.flow.flowOf(
