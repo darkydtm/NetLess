@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 forwarding audit fix
+
+- Origin packets now address the first route hop as `currentNodeId`; `nextHop` is the following hop or final destination.
+- Relay receive accepts the addressed local node, preserves canonical integrity/signature validation, and rewrites `currentNodeId` and `nextHop` to the next two route positions.
+- Duplicate packets replay a relaying observation, and terminal failure receipts are returned and propagated instead of being treated as successful delivery.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Three-node integration coverage
 
 - Added real Origin, Relay, and Destination `MeshRuntime` instances with separate identities and independent relay stores.

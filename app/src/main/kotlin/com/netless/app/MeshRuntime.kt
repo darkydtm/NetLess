@@ -52,7 +52,10 @@ class MeshRuntime(
 		if (selected == null) {
 			return receipt(packetId, DeliveryState.Failed).also(::emit)
 		}
-		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
+		val firstHop = selected.hops.firstOrNull()?.nextNodeId
+		val currentNode = firstHop ?: localNode
+		val nextHop = selected.hops.getOrNull(1)?.nextNodeId ?: destination.takeUnless { it == currentNode }
+		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0), currentNode), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(canonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
@@ -66,7 +69,7 @@ class MeshRuntime(
 		val now = nowMillis()
 		val packet = try {
 			codec.decode(bytes, now).also {
-				require(it.forwarding.currentNodeId == localNode && (it.forwarding.nextHop == null || it.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
+				require(it.forwarding.currentNodeId == localNode) { "packet is not addressed to this node" }
 				require(validIntegrity(it, bytes, now)) { "packet integrity check failed" }
 				require(verifySenderSignature(it, canonical(it, now))) { "packet signature check failed" }
 			}
@@ -75,8 +78,9 @@ class MeshRuntime(
 			if (packetId != null) emit(receipt(packetId, DeliveryState.Failed))
 			throw error
 		}
-		if (relayStore?.contains(packet.forwarding.packetId) == true)
-			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
+		if (relayStore?.contains(packet.forwarding.packetId) == true) {
+			return receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
+		}
 		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
 		if (packet.forwarding.finalNodeId == localNode) {
 			val result = try {
@@ -93,7 +97,8 @@ class MeshRuntime(
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
 			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
-		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = hop.nextNodeId, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
+		val followingHop = selected.hops.getOrNull(1)?.nextNodeId ?: packet.forwarding.finalNodeId.takeUnless { it == hop.nextNodeId }
+		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = followingHop, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
 		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(rewritten, now))
 		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
 		relayStore?.put(forwardedBytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
@@ -104,7 +109,7 @@ class MeshRuntime(
 		return when (val decoded = ControlCodec.decode(frame)) {
 			is com.netless.protocol.Forward -> {
 				val receipt = receive(decoded.packet, ingress)
-				if (receipt.state == DeliveryState.Delivered) ControlCodec.receipt(receipt) else ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0))
+				if (receipt.state != DeliveryState.Relaying) ControlCodec.receipt(receipt) else ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, true))
 			}
 			is Acknowledgement -> frame
 			is Receipt -> {
@@ -144,8 +149,10 @@ class MeshRuntime(
 				connection.send(ControlCodec.forward(bytes))
 			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
 				is Receipt -> {
-					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && response.value.state == DeliveryState.Delivered)
+					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId)
 					require(response.value.timestampEpochMillis <= now) { "receipt timestamp is in the future" }
+					if (response.value.state == DeliveryState.Failed) return response.value.also(::emit)
+					require(response.value.state == DeliveryState.Delivered)
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					finalDelivery = true
 					relayStore?.markDelivered(packetId)
