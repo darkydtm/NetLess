@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 review blocker
+
+- Added explicit RelayStore file format magic/versioning with a backward-compatible reader for the pre-terminal-receipt format.
+- Legacy records are validated, retained, and atomically migrated on load; encrypted opaque values, entry/value/file bounds, and atomic replacement remain enforced.
+- Added restart coverage proving a terminal receipt created from a legacy store is replayable after recreation.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 review blockers
 
 - MeshRuntime now checks persisted terminal receipts before generic duplicate handling, so destination retries replay the same receipt without handing content off twice.

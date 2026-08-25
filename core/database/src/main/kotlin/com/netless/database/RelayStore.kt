@@ -18,6 +18,8 @@ private const val MAX_PERSISTED_ENTRIES = 10_000
 private const val MAX_PERSISTED_VALUE_BYTES = 2 * 1024 * 1024
 private const val MAX_PERSISTED_FILE_BYTES = 32 * 1024 * 1024
 private const val MAX_PACKET_BYTES = 1024 * 1024
+private const val STORAGE_MAGIC = 0x524C5931
+private const val STORAGE_VERSION = 1
 
 enum class RelayState {
 	PENDING,
@@ -155,9 +157,17 @@ class RelayStore(
 		if (file.length() > MAX_PERSISTED_FILE_BYTES) return
 		val loadedRecords = LinkedHashMap<String, ByteArray>()
 		val loadedDeduplication = HashMap<String, Long>()
+		var legacyFormat = false
 		try {
 			DataInputStream(file.inputStream().buffered()).use { input ->
-				val count = input.readInt()
+				val header = input.readInt()
+				val count = if (header == STORAGE_MAGIC) {
+					require(input.readInt() == STORAGE_VERSION) { "unsupported relay storage version" }
+					input.readInt()
+				} else {
+					legacyFormat = true
+					header
+				}
 				require(count in 0..MAX_PERSISTED_ENTRIES) { "invalid relay entry count" }
 				repeat(count) {
 					val key = input.readUTF()
@@ -190,6 +200,7 @@ class RelayStore(
 				return@forEach
 			}
 		}
+		if (legacyFormat) persist()
 	}
 
 	private fun persist() {
@@ -200,6 +211,8 @@ class RelayStore(
 		val temporary = File(file.path + ".tmp")
 		temporary.outputStream().buffered().use { stream ->
 			DataOutputStream(stream).use { output ->
+				output.writeInt(STORAGE_MAGIC)
+				output.writeInt(STORAGE_VERSION)
 				output.writeInt(deduplication.size)
 				deduplication.forEach { (key, expiry) ->
 					output.writeUTF(key)

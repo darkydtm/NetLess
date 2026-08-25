@@ -2,6 +2,8 @@ package com.netless.database
 
 import com.netless.common.NodeId
 import com.netless.common.PacketId
+import com.netless.protocol.DeliveryReceipt
+import com.netless.protocol.DeliveryState
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -97,6 +99,40 @@ class RelayStoreTest {
 			assertContentEquals(byteArrayOf(1, 2), restored.get(packetId)!!.packet)
 		} finally {
 			file.delete()
+		}
+	}
+
+	@Test
+	fun migratesLegacyStoreAndReplaysTerminalReceiptAfterRestart() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
+			val value = ByteArrayOutputStream().use { bytes ->
+				DataOutputStream(bytes).use { output ->
+					output.writeUTF(packetId.value)
+					output.writeLong(200L)
+					output.writeBoolean(true)
+					output.writeUTF(nextHop.value)
+					output.writeInt(2)
+					output.write(byteArrayOf(1, 2))
+				}
+				bytes.toByteArray()
+			}
+			val protected = keyStore.protect(value)
+			DataOutputStream(file.outputStream()).use { output ->
+				output.writeInt(1)
+				output.writeUTF("relay:${packetId.value}")
+				output.writeLong(200L)
+				output.writeBoolean(true)
+				output.writeInt(protected.size)
+				output.write(protected)
+			}
+			val receipt = DeliveryReceipt(packetId, DeliveryState.Delivered, NodeId("destination"), 100L)
+			RelayStore(keyStore, file, nowMillis = { 0L }).markTerminal(packetId, receipt)
+			assertEquals(receipt, RelayStore(keyStore, file, nowMillis = { 0L }).get(packetId)!!.terminalReceipt)
+		} finally {
+			file.delete()
+			File(file.path + ".lock").delete()
 		}
 	}
 
