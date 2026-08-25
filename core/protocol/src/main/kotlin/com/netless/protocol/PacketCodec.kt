@@ -14,12 +14,21 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
-object VersionedPacketCodec {
+interface VersionedPacketCodecContract {
+	fun encode(packet: PacketEnvelope, nowMillis: Long = System.currentTimeMillis()): ByteArray
+	fun decode(bytes: ByteArray, nowMillis: Long = System.currentTimeMillis()): PacketEnvelope
+}
+
+object VersionedPacketCodec : VersionedPacketCodecContract {
 	private const val MAX_STRING_BYTES = 65_536
 	private const val MAX_BINARY_BYTES = 16 * 1024 * 1024
 	private const val MAX_RECIPIENTS = 1_024
 
-	fun encode(packet: PacketEnvelope, nowMillis: Long = System.currentTimeMillis()): ByteArray {
+	fun encode(packet: PacketEnvelope): ByteArray = encode(packet, System.currentTimeMillis())
+
+	fun decode(bytes: ByteArray): PacketEnvelope = decode(bytes, System.currentTimeMillis())
+
+	override fun encode(packet: PacketEnvelope, nowMillis: Long): ByteArray {
 		checkVersion(packet.version)
 		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
 		return ByteArrayOutputStream().use { output ->
@@ -34,7 +43,7 @@ object VersionedPacketCodec {
 		}
 	}
 
-	fun decode(bytes: ByteArray, nowMillis: Long = System.currentTimeMillis()): PacketEnvelope {
+	override fun decode(bytes: ByteArray, nowMillis: Long): PacketEnvelope {
 		require(bytes.isNotEmpty()) { "Packet bytes must not be empty" }
 		try {
 			DataInputStream(ByteArrayInputStream(bytes)).use { input ->
@@ -141,5 +150,23 @@ object VersionedPacketCodec {
 		if (version != CURRENT_PROTOCOL_VERSION) {
 			throw UnsupportedProtocolVersionException("Unsupported protocol version: $version")
 		}
+	}
+}
+
+class LegacyPacketCodecAdapter(
+	private val legacyCodec: PacketCodec = BinaryPacketCodec(),
+) : VersionedPacketCodecContract {
+	override fun encode(packet: PacketEnvelope, nowMillis: Long): ByteArray {
+		require(packet.createdAtEpochMillis == 0L && packet.expiresAtEpochMillis == Long.MAX_VALUE) {
+			"Legacy packet codec cannot encode packet timestamps"
+		}
+		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
+		return legacyCodec.encode(packet)
+	}
+
+	override fun decode(bytes: ByteArray, nowMillis: Long): PacketEnvelope {
+		val packet = legacyCodec.decode(bytes)
+		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
+		return packet
 	}
 }

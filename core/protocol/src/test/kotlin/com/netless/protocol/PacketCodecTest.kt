@@ -63,4 +63,23 @@ class PacketCodecTest {
 
 		assertEquals(packet.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(packet)))
 	}
+
+	@Test
+	fun legacyAndVersionedCodecsRejectEachOthersWireFormats() {
+		val legacyBytes = BinaryPacketCodec().encode(packet)
+		val versionedBytes = VersionedPacketCodec.encode(packet)
+
+		assertFailsWith<IllegalArgumentException> { VersionedPacketCodec.decode(legacyBytes) }
+		assertFailsWith<IllegalArgumentException> { BinaryPacketCodec().decode(versionedBytes) }
+	}
+
+	@Test
+	fun legacyMigrationRequiresAnExplicitAdapter() {
+		val codec: VersionedPacketCodecContract = LegacyPacketCodecAdapter()
+
+		assertEquals(packet.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(packet)))
+		assertFailsWith<IllegalArgumentException> {
+			codec.encode(packet.copy(createdAtEpochMillis = 1L))
+		}
+	}
 }

@@ -14,6 +14,7 @@ import java.nio.file.StandardCopyOption
 
 private const val MAX_PERSISTED_ENTRIES = 10_000
 private const val MAX_PERSISTED_VALUE_BYTES = 2 * 1024 * 1024
+private const val MAX_PERSISTED_FILE_BYTES = 32 * 1024 * 1024
 private const val MAX_PACKET_BYTES = 1024 * 1024
 
 enum class RelayState {
@@ -128,6 +129,7 @@ class RelayStore(
 		records.clear()
 		deduplication.clear()
 		if (!file.isFile || file.length() == 0L) return
+		if (file.length() > MAX_PERSISTED_FILE_BYTES) return
 		val loadedRecords = LinkedHashMap<String, ByteArray>()
 		val loadedDeduplication = HashMap<String, Long>()
 		try {

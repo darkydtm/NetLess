@@ -183,3 +183,9 @@ Focused Kotlin tests could not run because the repository has no Gradle wrapper 
 ### Commit
 
 `395d81a fix remaining relay store review findings`
+
+## Foundation Review Blocker Fix Report
+
+- Added a 32 MiB aggregate persisted-file limit before RelayStore entry iteration or persisted-value allocation.
+- Added focused oversized-file coverage and kept storage injection explicit through `storageFile`.
+- Tests were unavailable because no Gradle wrapper, `gradle`, or `kotlinc` exists locally; `git diff --check` passed.

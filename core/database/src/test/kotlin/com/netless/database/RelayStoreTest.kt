@@ -253,6 +253,18 @@ class RelayStoreTest {
 			file.delete()
 		}
 	}
+
+	@Test
+	fun rejectsOversizedPersistedFileBeforeReadingEntries() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			file.setLength(32L * 1024 * 1024 + 1)
+
+			assertEquals(0, RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), file, nowMillis = { 0L }).count())
+		} finally {
+			file.delete()
+		}
+	}
 }
 
 private class RecordingKeyWrapper : KeyWrapper {

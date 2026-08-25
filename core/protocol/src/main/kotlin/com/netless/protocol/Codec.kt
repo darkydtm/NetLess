@@ -17,7 +17,7 @@ interface PacketCodec {
 
 class UnsupportedProtocolVersionException(message: String) : IllegalArgumentException(message)
 
-class BinaryPacketCodec : PacketCodec {
+open class LegacyPacketCodec : PacketCodec {
 	private companion object {
 		const val MAGIC = 0x4E4C5031
 		const val MAX_STRING_BYTES = 65_536
@@ -167,3 +167,5 @@ class BinaryPacketCodec : PacketCodec {
 	private fun <T> enumValue(ordinal: Int, values: List<T>, name: String): T =
 		values.getOrNull(ordinal) ?: throw IllegalArgumentException("Invalid $name")
 }
+
+class BinaryPacketCodec : LegacyPacketCodec()
