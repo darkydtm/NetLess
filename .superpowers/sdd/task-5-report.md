@@ -32,7 +32,7 @@ Static checks confirmed no `MessageFrame` or `BinaryPacketCodec` references rema
 
 ## Commit
 
-`fix?` - to be filled after commit.
+`7b0e14b` - `migrate messaging to mesh runtime`.
 
 ## Concerns
 
