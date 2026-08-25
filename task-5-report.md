@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Three-node integration coverage
+
+- Added real Origin, Relay, and Destination `MeshRuntime` instances with separate identities and independent relay stores.
+- Added authenticated in-memory adapters that deliver encoded control frames into the next runtime's `receiveFrame`, using Bluetooth then Wi-Fi Direct, with opaque content delivery and failure retention.
+- Added forged receipt rejection coverage and verified relay/origin cleanup only on terminal delivery.
+
+Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 gate blocker
 
 - Unified per-hop integrity canonicalization for origin signing, relay rewrites, and destination validation; all paths blank `perHopIntegrity` and `senderSignature` consistently and use the captured packet clock value.

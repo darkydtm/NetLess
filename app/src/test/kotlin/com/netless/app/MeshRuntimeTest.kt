@@ -34,6 +34,31 @@ import java.security.MessageDigest
 
 class MeshRuntimeTest {
 	@Test
+	fun `delivers through three real runtimes with mixed authenticated hops`() = runTest {
+		val network = ThreeNodeNetwork()
+		val content = content()
+		val result = network.origin.send(content, network.destinationId, TransportPolicy.Automatic())
+
+		assertEquals(DeliveryState.Delivered, result.state)
+		assertEquals(content, network.received)
+		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
+		assertTrue(!network.originStore.contains(result.packetId))
+		assertTrue(!network.relayStore.contains(result.packetId))
+	}
+
+	@Test
+	fun `retains failed three-node delivery and rejects forged and duplicate receipts`() = runTest {
+		val network = ThreeNodeNetwork(failDestination = true)
+		val result = network.origin.send(content(), network.destinationId, TransportPolicy.Automatic())
+
+		assertEquals(DeliveryState.Failed, result.state)
+		assertTrue(network.originStore.contains(result.packetId))
+		assertTrue(network.relayStore.contains(result.packetId))
+		val forged = ControlCodec.receipt(DeliveryReceipt(result.packetId, DeliveryState.Delivered, NodeId("attacker"), 1_000L))
+		assertTrue(runCatching { network.relay.receiveFrame(forged, TransportType.WifiDirect) }.isFailure)
+		assertTrue(network.relayStore.contains(result.packetId))
+	}
+	@Test
 	fun `forwards one packet through bluetooth then wifi direct`() = runTest {
 		val network = FakeNetwork()
 		val runtime = network.runtime()
@@ -106,6 +131,51 @@ class MeshRuntimeTest {
 	}
 
 	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
+}
+
+private class ThreeNodeNetwork(failDestination: Boolean = false) {
+	val destinationId = NodeId("destination")
+	val usedTransports = mutableListOf<TransportType>()
+	val originStore = RelayStore()
+	val relayStore = RelayStore()
+	var received: ContentEnvelope? = null
+	private val keys = mapOf("origin" to PublicKey(byteArrayOf(1)), "relay" to PublicKey(byteArrayOf(2)), "destination" to PublicKey(byteArrayOf(3)))
+	lateinit var origin: MeshRuntime
+	lateinit var relay: MeshRuntime
+	lateinit var destination: MeshRuntime
+
+	init {
+		val nodes = mapOf(NodeId("origin") to { origin }, NodeId("relay") to { relay }, destinationId to { destination })
+		fun runtime(node: NodeId, store: RelayStore?, transports: List<Pair<TransportType, NodeId>>, onContent: suspend (ContentEnvelope) -> Unit = {}) = MeshRuntime(
+			node, TransportRegistry().also { registry -> transports.forEach { (type, peer) -> registry.register(NodeAdapter(type, node, peer, nodes, this, failDestination)) } },
+			{ _, _ -> Route(listOf(node, transports.first().second), RouteMetrics(1.0, 1.0, 1.0, 1.0), hops = listOf(RouteHop(node, transports.first().second, transports.first().first, endpoint(transports.first().first, transports.first().second), RouteMetrics(1.0, 1.0, 1.0, 1.0), Long.MAX_VALUE))) },
+			relayStore = store, signPacket = { byteArrayOf(9) }, verifySenderSignature = { _, _ -> true }, onContent = onContent,
+			localIdentity = keys.getValue(node.value), signSession = { Signature(byteArrayOf(8)) }, verifySession = { _, _, _ -> true }, nowMillis = { 1_000L }
+		)
+		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
+		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
+		destination = runtime(destinationId, null, emptyList()) { received = it }
+	}
+
+	private fun endpoint(type: TransportType, node: NodeId) = TransportEndpoint(node, type.name, mapOf("nodeId" to node.value, "identityKey" to Base64.getEncoder().encodeToString(keys.getValue(node.value).encoded)))
+
+	private class NodeAdapter(override val type: TransportType, private val local: NodeId, private val peer: NodeId, private val nodes: Map<NodeId, () -> MeshRuntime>, private val network: ThreeNodeNetwork, private val fail: Boolean) : TransportAdapter {
+		override val availability = MutableStateFlow(TransportState.Idle)
+		override suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest): TransportConnection {
+			require(endpoint.nodeId == peer && request.expectedPeerIdentity == network.keys.getValue(peer.value))
+			if (fail && peer == network.destinationId) error("destination unavailable")
+			network.usedTransports += type
+			return object : TransportConnection {
+				override val peerIdentity = network.keys.getValue(peer.value)
+				private var incoming = kotlinx.coroutines.flow.emptyFlow<ByteArray>()
+				override val incomingPackets get() = incoming
+				override suspend fun send(packet: ByteArray) { incoming = kotlinx.coroutines.flow.flowOf(nodes.getValue(peer)().receiveFrame(packet, type)) }
+				override suspend fun close() = Unit
+			}
+		}
+		override suspend fun connect(endpoint: TransportEndpoint): TransportConnection = error("use authenticated connect")
+		override fun supports(capability: com.netless.transport.DiscoveryCapability) = true
+	}
 }
 
 private class FakeNetwork {
