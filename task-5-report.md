@@ -145,6 +145,15 @@ Verification: `git diff --check` passed. Gradle tests were not run because this 
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. The requested real 3-node integration coverage remains unavailable in this environment and is not claimed here.
 
+## Focused Task 5 hardening
+
+- Bound test signing verification to the packet sender identity instead of accepting any known node key.
+- Assert the authenticated connection reports the expected route-hop identity before forwarding.
+- Unified sender-signature and per-hop-integrity input through the same canonical packet representation, blanking both mutable signature fields consistently.
+- Existing three-node coverage asserts the terminal receipt packet ID, destination node, timestamp, propagation to relay and origin, duplicate receipt rejection, and destination callback failure retention.
+
+Verification: `git diff --check` passed. Kotlin tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 High finding
 
 - Forwarding now accepts a validated immediate `HopAcknowledgement` followed by a validated terminal `DeliveryReceipt`, or a terminal receipt directly, and propagates terminal delivery upstream before deleting local relay state.

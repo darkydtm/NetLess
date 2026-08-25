@@ -56,7 +56,7 @@ class MeshRuntime(
 		val signature = signPacket(canonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
-		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(integrityInput(signed), now))
+		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(signed, now))
 		val bytes = codec.encode(signed.copy(forwarding = signed.forwarding.copy(perHopIntegrity = integrity)), now)
 		relayStore?.put(bytes, packetId, selected.expiresAtMillis, selected.hops.firstOrNull()?.nextNodeId)
 		return forward(bytes, packetId, selected.hops.firstOrNull(), now)
@@ -94,7 +94,7 @@ class MeshRuntime(
 			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = hop.nextNodeId, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
-		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(integrityInput(rewritten), now))
+		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(rewritten, now))
 		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
 		relayStore?.put(forwardedBytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
 		return forward(forwardedBytes, packet.forwarding.packetId, hop, now)
@@ -140,6 +140,7 @@ class MeshRuntime(
 				val expectedKey = com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(hop.endpoint.metadata.getValue("identityKey")))
 				require(localIdentity != null && signSession != null && verifySession != null) { "authenticated transport configuration is required" }
 				val connection = adapter.connectAuthenticated(hop.endpoint, com.netless.transport.AuthenticatedConnectionRequest(expectedKey, hop.endpoint.metadata["sessionId"] ?: UUID.randomUUID().toString(), 1, signSession!!, verifySession!!))
+				require(connection.peerIdentity == expectedKey) { "authenticated peer identity does not match route hop" }
 				connection.send(ControlCodec.forward(bytes))
 			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
 				is Receipt -> {
@@ -180,17 +181,12 @@ class MeshRuntime(
 
 	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray, now: Long): Boolean {
 		val supplied = packet.forwarding.perHopIntegrity
-		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(integrityInput(packet), now))
+		val expected = MessageDigest.getInstance("SHA-256").digest(canonical(packet, now))
 		return supplied.contentEquals(expected)
 	}
 
-	private fun integrityInput(packet: PacketEnvelope) = packet.copy(
-		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
-		content = packet.content.copy(senderSignature = byteArrayOf(0)),
-	)
-
 	private fun canonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
-		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(1)),
+		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
 		content = packet.content.copy(senderSignature = byteArrayOf(0)),
 	), now)
 
