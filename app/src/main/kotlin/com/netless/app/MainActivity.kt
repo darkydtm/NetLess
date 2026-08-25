@@ -8,9 +8,14 @@ import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.result.contract.ActivityResultContracts
 
 class MainActivity : ComponentActivity() {
 	private val permissionRequest = 100
+	private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+		if (result.isNotEmpty() && result.values.all { it }) ContextCompat.startForegroundService(this, Intent(this, NetlessForegroundService::class.java))
+	}
 	private val viewModel: ProfileViewModel by viewModels {
 		ProfileViewModel.factory((application as NetlessApplication).container.identityRepository)
 	}
@@ -21,16 +26,15 @@ class MainActivity : ComponentActivity() {
 		if (requiredPermissions().all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
 			ContextCompat.startForegroundService(this, Intent(this, NetlessForegroundService::class.java))
 		}
-		setContent { NetlessApp(viewModel, container) }
-		val missing = requiredPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-		if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), permissionRequest)
-	}
-
-	override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-		super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-		if (requestCode == permissionRequest && grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-			ContextCompat.startForegroundService(this, Intent(this, NetlessForegroundService::class.java))
+		setContent {
+			PredictiveBackHandler { progress ->
+				progress.collect { }
+				finish()
+			}
+			NetlessApp(viewModel, container)
 		}
+		val missing = requiredPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+		if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
 	}
 
 	private fun requiredPermissions(): List<String> = buildList {

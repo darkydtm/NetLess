@@ -1,5 +1,12 @@
 package com.netless.app
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -57,8 +66,9 @@ private fun ProfileScreen(
 	onBioChanged: (String) -> Unit,
 	onSave: () -> Unit,
 ) {
+	val haptics = LocalHapticFeedback.current
 	Column(
-		modifier = Modifier.fillMaxSize().padding(24.dp),
+		modifier = Modifier.fillMaxSize().padding(24.dp).animateContentSize(),
 		verticalArrangement = Arrangement.spacedBy(16.dp),
 	) {
 		Text(
@@ -81,13 +91,15 @@ private fun ProfileScreen(
 			minLines = 3,
 		)
 		state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-		Text("Nearby contacts: ${contacts.size}")
-		contacts.forEach { Text(it.endpoint.address, style = MaterialTheme.typography.bodyMedium) }
+		AnimatedContent(targetState = contacts.size, label = "contact-count") { count -> Text("Nearby contacts: $count") }
+		contacts.forEach { contact -> Text(contact.endpoint.address, style = MaterialTheme.typography.bodyMedium) }
 		Text("Messages", style = MaterialTheme.typography.titleMedium)
-		messages.forEach { Text(it.body) }
+		messages.forEach { item ->
+			AnimatedVisibility(visible = true, enter = slideInVertically { it / 2 } + fadeIn(), exit = slideOutVertically() + fadeOut()) { Text(item.body) }
+		}
 		OutlinedTextField(value = message, onValueChange = onMessageChanged, label = { Text("Message") }, modifier = Modifier.fillMaxWidth())
-		Button(onClick = onSendMessage, enabled = message.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send") }
-		Button(onClick = onSave, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
+		Button(onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSendMessage() }, enabled = message.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send") }
+		Button(onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSave() }, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
 			Text(if (state.saving) "Saving..." else "Save profile")
 		}
 	}
