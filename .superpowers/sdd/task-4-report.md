@@ -90,6 +90,42 @@ Focused Gradle tests could not run because the repository has no Gradle wrapper 
 - File-backed persistence requires the same durable `DatabaseKeyStore` wrapper/key alias on recreation; the existing Android keystore wrapper provides that durability.
 - Kotlin/Android compilation remains unverified locally and should run in CI.
 
+## Re-review Fix Report
+
+### Changes
+
+- `core/database/src/main/kotlin/com/netless/database/RelayStore.kt`
+  - Reloads persisted state while holding a per-file OS lock plus a process lock, preventing stale multi-instance writes.
+  - Enforces the persisted entry count and serialized value bounds before writing.
+  - Writes to a temporary file and replaces the target atomically when supported, with a non-atomic replacement fallback.
+  - Validates decrypted packet ID and expiry against the persisted key and metadata before accepting a record.
+  - Hides expired records from `get`, and reloads before `get`, `expire`, `markDelivered`, and `count`.
+- `core/database/src/test/kotlin/com/netless/database/RelayStoreTest.kt`
+  - Added default-constructor recreation persistence, write-bound, expired-get, and metadata-mismatch coverage.
+- `core/protocol/src/main/kotlin/com/netless/protocol/Codec.kt`
+  - Restored the public legacy `PacketCodec` interface and kept `BinaryPacketCodec` implementing it.
+- `core/protocol/src/main/kotlin/com/netless/protocol/PacketCodec.kt`
+  - Renamed the new timestamp-aware codec to `VersionedPacketCodec` to avoid deleting the legacy interface name.
+- `core/protocol/src/test/kotlin/com/netless/protocol/PacketCodecTest.kt`
+  - Updated new-codec callers and added legacy interface assignability coverage.
+
+### Verification
+
+```text
+$ ./gradlew :core:database:test --tests com.netless.database.RelayStoreTest
+/usr/bin/bash: ./gradlew: No such file or directory
+exit: 127
+
+$ ./gradlew :core:protocol:test --tests com.netless.protocol.PacketCodecTest --tests com.netless.protocol.ProtocolContractsTest
+/usr/bin/bash: ./gradlew: No such file or directory
+exit: 127
+
+$ git diff --check
+PASS
+```
+
+Focused tests could not run because the repository has no Gradle wrapper and neither `gradle` nor `kotlinc` is installed locally. No Android build was run. Existing unrelated Task 1, Task 2, and Task 3 files were preserved.
+
 ## Remaining Review Blocker Fix Report
 
 ### Changes

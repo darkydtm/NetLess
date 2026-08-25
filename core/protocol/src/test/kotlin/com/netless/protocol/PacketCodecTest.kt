@@ -34,7 +34,7 @@ class PacketCodecTest {
 
 	@Test
 	fun `packet codec preserves forwarding and encrypted content`() {
-		assertEquals(packet, PacketCodec.decode(PacketCodec.encode(packet)))
+		assertEquals(packet, VersionedPacketCodec.decode(VersionedPacketCodec.encode(packet)))
 	}
 
 	@Test
@@ -51,9 +51,16 @@ class PacketCodecTest {
 
 	@Test
 	fun `codec expiry checks use supplied time`() {
-		val bytes = PacketCodec.encode(packet.copy(expiresAtEpochMillis = 100L), nowMillis = 50L)
+		val bytes = VersionedPacketCodec.encode(packet.copy(expiresAtEpochMillis = 100L), nowMillis = 50L)
 
-		assertEquals(packet.copy(expiresAtEpochMillis = 100L), PacketCodec.decode(bytes, nowMillis = 50L))
-		assertFailsWith<IllegalArgumentException> { PacketCodec.decode(bytes, nowMillis = 100L) }
+		assertEquals(packet.copy(expiresAtEpochMillis = 100L), VersionedPacketCodec.decode(bytes, nowMillis = 50L))
+		assertFailsWith<IllegalArgumentException> { VersionedPacketCodec.decode(bytes, nowMillis = 100L) }
+	}
+
+	@Test
+	fun legacyCodecRemainsAssignableToItsPublicInterface() {
+		val codec: PacketCodec = BinaryPacketCodec()
+
+		assertEquals(packet.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(packet)))
 	}
 }

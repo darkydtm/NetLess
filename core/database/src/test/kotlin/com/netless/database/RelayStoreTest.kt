@@ -2,6 +2,7 @@ package com.netless.database
 
 import com.netless.common.NodeId
 import com.netless.common.PacketId
+import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
 import kotlin.test.Test
@@ -94,6 +95,85 @@ class RelayStoreTest {
 			val restored = RelayStore(keyStore, file, nowMillis = { 100L })
 
 			assertContentEquals(byteArrayOf(1, 2), restored.get(packetId)!!.packet)
+		} finally {
+			file.delete()
+		}
+	}
+
+	@Test
+	fun defaultStoragePersistsAcrossStoreRecreation() {
+		val home = File.createTempFile("relay-home", "").apply { delete(); mkdirs() }
+		val previousHome = System.getProperty("user.home")
+		try {
+			System.setProperty("user.home", home.path)
+			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
+			RelayStore(keyStore).put(byteArrayOf(1), packetId, Long.MAX_VALUE, nextHop)
+
+			assertContentEquals(byteArrayOf(1), RelayStore(keyStore).get(packetId)!!.packet)
+		} finally {
+			if (previousHome == null) System.clearProperty("user.home") else System.setProperty("user.home", previousHome)
+			home.deleteRecursively()
+		}
+	}
+
+	@Test
+	fun refusesToWriteBeyondPersistedEntryBound() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			DataOutputStream(file.outputStream()).use { output ->
+				output.writeInt(10_000)
+				repeat(10_000) {
+					output.writeUTF("relay:packet-$it")
+					output.writeLong(100L)
+					output.writeBoolean(false)
+				}
+			}
+			val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), file, nowMillis = { 0L })
+
+			assertFailsWith<IllegalArgumentException> {
+				store.put(byteArrayOf(1), PacketId("packet-10000"), 100L, null)
+			}
+		} finally {
+			file.delete()
+			File(file.path + ".lock").delete()
+		}
+	}
+
+	@Test
+	fun getHidesExpiredPacket() {
+		var now = 0L
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), storageFile = null, nowMillis = { now })
+		store.put(byteArrayOf(1), packetId, 100L, null)
+		now = 100L
+
+		assertNull(store.get(packetId))
+	}
+
+	@Test
+	fun ignoresStoredMetadataThatDoesNotMatchItsKey() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
+			val value = ByteArrayOutputStream().use { bytes ->
+				DataOutputStream(bytes).use { output ->
+					output.writeUTF("other")
+					output.writeLong(100L)
+					output.writeBoolean(false)
+					output.writeInt(1)
+					output.writeByte(1)
+				}
+				bytes.toByteArray()
+			}
+			DataOutputStream(file.outputStream()).use { output ->
+				output.writeInt(1)
+				output.writeUTF("relay:${packetId.value}")
+				output.writeLong(100L)
+				output.writeBoolean(true)
+				output.writeInt(keyStore.protect(value).size)
+				output.write(keyStore.protect(value))
+			}
+
+			assertEquals(0, RelayStore(keyStore, file, nowMillis = { 0L }).count())
 		} finally {
 			file.delete()
 		}

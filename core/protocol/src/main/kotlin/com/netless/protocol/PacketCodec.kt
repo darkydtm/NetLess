@@ -14,7 +14,7 @@ import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
-object PacketCodec {
+object VersionedPacketCodec {
 	private const val MAX_STRING_BYTES = 65_536
 	private const val MAX_BINARY_BYTES = 16 * 1024 * 1024
 	private const val MAX_RECIPIENTS = 1_024
