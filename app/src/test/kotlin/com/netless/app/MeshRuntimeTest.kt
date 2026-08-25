@@ -45,6 +45,7 @@ class MeshRuntimeTest {
 		assertEquals(DeliveryReceipt(result.packetId, DeliveryState.Delivered, network.destinationId, 1_000L), network.destinationReceipt)
 		assertEquals(network.destinationReceipt, network.relayReceipt)
 		assertEquals(network.destinationReceipt, network.originReceipt)
+		assertTrue(!network.destinationStore.hasPending(result.packetId))
 		assertTrue(network.destinationStore.contains(result.packetId))
 		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
 		assertTrue(!network.originStore.contains(result.packetId))
@@ -65,6 +66,7 @@ class MeshRuntimeTest {
 		assertEquals(1, network.contentDeliveries)
 		assertEquals(result.packetId, network.destinationReceipt?.packetId)
 		assertEquals(network.destinationId, network.destinationReceipt?.nodeId)
+		assertTrue(!network.destinationStore.hasPending(result.packetId))
 		assertTrue(network.destinationStore.contains(result.packetId))
 	}
 

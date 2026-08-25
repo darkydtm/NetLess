@@ -114,6 +114,16 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Final Task 5 review findings
+
+- Separated `RelayStore.hasPending` from `contains`: terminal records remain dedup tombstones without pending packet presence.
+- Retained durable terminal receipt metadata and replayed it before generic dedup; pending duplicate receives retry forwarding from stored bytes.
+- `markTerminal` validates packet id, terminal delivery state, receipt time, and stored final destination when available.
+- Legacy storage migration now rejects trailing bytes and runs parsing and atomic rewrite under the file lock.
+- Updated contract and integration assertions for pending cleanup versus dedup retention.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 review blocker
 
 - Added explicit RelayStore file format magic/versioning with a backward-compatible reader for the pre-terminal-receipt format.

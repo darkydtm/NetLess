@@ -62,7 +62,7 @@ class MeshRuntime(
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
 		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(signed, now))
 		val bytes = codec.encode(signed.copy(forwarding = signed.forwarding.copy(perHopIntegrity = integrity)), now)
-		relayStore?.put(bytes, packetId, selected.expiresAtMillis, selected.hops.firstOrNull()?.nextNodeId)
+		relayStore?.put(bytes, packetId, selected.expiresAtMillis, selected.hops.firstOrNull()?.nextNodeId, destination)
 		return forward(bytes, packetId, selected.hops.firstOrNull(), now)
 	}
 
@@ -83,10 +83,12 @@ class MeshRuntime(
 		if (terminalReceipts[packet.forwarding.packetId] != null) {
 			return terminalReceipts.getValue(packet.forwarding.packetId).also(::emit)
 		}
-		if (relayStore?.contains(packet.forwarding.packetId) == true) {
-			return receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
+		val pending = relayStore?.get(packet.forwarding.packetId)
+		if (pending?.state == com.netless.database.RelayState.PENDING) {
+			val retryHop = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())?.hops?.firstOrNull()
+			return if (retryHop != null) forward(pending.packet, packet.forwarding.packetId, retryHop, now) else receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
 		}
-		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
+		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop, packet.forwarding.finalNodeId)
 		if (packet.forwarding.finalNodeId == localNode) {
 			val result = try {
 				onContent(packet.content)

@@ -31,6 +31,7 @@ class StoredRelayPacket(
 	packet: ByteArray,
 	val expiresAtMillis: Long,
 	val nextHop: NodeId?,
+	val finalDestination: NodeId?,
 	val state: RelayState,
 	val terminalReceipt: DeliveryReceipt? = null,
 ) {
@@ -53,12 +54,11 @@ class RelayStore(
 	private val deduplication = HashMap<String, Long>()
 
 	init {
-		load()
-		expire(nowMillis())
+		withFileLock { load(); prune(nowMillis()) }
 	}
 
 	@Synchronized
-	fun put(packet: ByteArray, packetId: PacketId, expiresAtMillis: Long, nextHop: NodeId?) {
+	fun put(packet: ByteArray, packetId: PacketId, expiresAtMillis: Long, nextHop: NodeId?, finalDestination: NodeId? = null) {
 		require(packet.isNotEmpty()) { "packet must not be empty" }
 		require(packet.size <= MAX_PACKET_BYTES) { "packet is too large" }
 		val now = nowMillis()
@@ -70,7 +70,7 @@ class RelayStore(
 			val key = key(packetId)
 			if (deduplication.containsKey(key)) return@withFileLock
 			if (deduplication.size >= MAX_PERSISTED_ENTRIES) throw IllegalArgumentException("too many relay entries")
-			val serialized = serialize(packetId, packet, expiresAtMillis, nextHop)
+			val serialized = serialize(packetId, packet, expiresAtMillis, nextHop, finalDestination)
 			require(serialized.size <= MAX_PERSISTED_VALUE_BYTES) { "relay value is too large" }
 			val value = databaseKeyStore.protect(serialized)
 			require(value.size <= MAX_PERSISTED_VALUE_BYTES) { "relay value is too large" }
@@ -106,11 +106,15 @@ class RelayStore(
 	}
 
 	@Synchronized
-	fun contains(packetId: PacketId): Boolean = withFileLock {
+	fun hasPending(packetId: PacketId): Boolean = withFileLock {
 		load()
 		prune(nowMillis())
-		deduplication.containsKey(key(packetId))
+		val stored = records[key(packetId)] ?: return@withFileLock false
+		runCatching { deserialize(databaseKeyStore.unprotect(stored)).state == RelayState.PENDING }.getOrDefault(false)
 	}
+
+	@Synchronized
+	fun contains(packetId: PacketId): Boolean = withFileLock { load(); prune(nowMillis()); deduplication.containsKey(key(packetId)) }
 
 	@Synchronized
 	fun markTerminal(packetId: PacketId, receipt: DeliveryReceipt) {
@@ -119,7 +123,11 @@ class RelayStore(
 			val key = key(packetId)
 			val stored = records[key] ?: return@withFileLock
 			val packet = deserialize(databaseKeyStore.unprotect(stored))
-			records[key] = databaseKeyStore.protect(serialize(packet.packetId, packet.packet, packet.expiresAtMillis, packet.nextHop, receipt))
+			require(receipt.packetId == packetId) { "receipt packet id does not match" }
+			require(receipt.state == DeliveryState.Delivered) { "receipt is not terminal" }
+			require(packet.finalDestination == null || receipt.nodeId == packet.finalDestination) { "receipt destination does not match" }
+			require(receipt.timestampEpochMillis <= nowMillis() && receipt.timestampEpochMillis < packet.expiresAtMillis) { "receipt timestamp is invalid" }
+			records[key] = databaseKeyStore.protect(serialize(packet.packetId, packet.packet, packet.expiresAtMillis, packet.nextHop, packet.finalDestination, receipt))
 			persist()
 		}
 	}
@@ -178,6 +186,7 @@ class RelayStore(
 						loadedRecords[key] = ByteArray(size).also(input::readFully)
 					}
 				}
+				require(input.read() == -1) { "trailing relay storage bytes" }
 			}
 		} catch (_: IOException) {
 			return
@@ -192,9 +201,9 @@ class RelayStore(
 				return@forEach
 			}
 			try {
-				val packet = deserialize(databaseKeyStore.unprotect(value))
+				val packet = deserialize(databaseKeyStore.unprotect(value), legacyFormat)
 				require(storedKey == key(packet.packetId) && expiry == packet.expiresAtMillis)
-				records[storedKey] = value
+				records[storedKey] = if (legacyFormat) databaseKeyStore.protect(serialize(packet.packetId, packet.packet, packet.expiresAtMillis, packet.nextHop, packet.finalDestination)) else value
 				deduplication[storedKey] = expiry
 			} catch (_: Exception) {
 				return@forEach
@@ -254,13 +263,15 @@ class RelayStore(
 		}
 	}
 
-	private fun serialize(packetId: PacketId, packet: ByteArray, expiresAtMillis: Long, nextHop: NodeId?, receipt: DeliveryReceipt? = null): ByteArray =
+	private fun serialize(packetId: PacketId, packet: ByteArray, expiresAtMillis: Long, nextHop: NodeId?, finalDestination: NodeId? = null, receipt: DeliveryReceipt? = null): ByteArray =
 		ByteArrayOutputStream().use { bytes ->
 			DataOutputStream(bytes).use { output ->
 				output.writeUTF(packetId.value)
 				output.writeLong(expiresAtMillis)
 				output.writeBoolean(nextHop != null)
 				if (nextHop != null) output.writeUTF(nextHop.value)
+				output.writeBoolean(finalDestination != null)
+				if (finalDestination != null) output.writeUTF(finalDestination.value)
 				output.writeBoolean(receipt != null)
 				if (receipt != null) {
 					output.writeUTF(receipt.state.name)
@@ -273,14 +284,15 @@ class RelayStore(
 			bytes.toByteArray()
 		}
 
-	private fun deserialize(value: ByteArray): StoredRelayPacket = DataInputStream(ByteArrayInputStream(value)).use { input ->
+	private fun deserialize(value: ByteArray, legacy: Boolean = false): StoredRelayPacket = DataInputStream(ByteArrayInputStream(value)).use { input ->
 		val packetId = PacketId(input.readUTF())
 		val expiresAtMillis = input.readLong()
 		val nextHop = if (input.readBoolean()) NodeId(input.readUTF()) else null
-		val receipt = if (input.readBoolean()) DeliveryReceipt(packetId, DeliveryState.valueOf(input.readUTF()), NodeId(input.readUTF()), input.readLong()) else null
+		val finalDestination = if (legacy) null else if (input.readBoolean()) NodeId(input.readUTF()) else null
+		val receipt = if (!legacy && input.readBoolean()) DeliveryReceipt(packetId, DeliveryState.valueOf(input.readUTF()), NodeId(input.readUTF()), input.readLong()) else null
 		val size = input.readInt()
 		require(size in 1..MAX_PACKET_BYTES) { "invalid packet size" }
 		val packet = ByteArray(size).also(input::readFully)
-		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, if (receipt == null) RelayState.PENDING else RelayState.TERMINAL, receipt)
+		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, finalDestination, if (receipt == null) RelayState.PENDING else RelayState.TERMINAL, receipt)
 	}
 }

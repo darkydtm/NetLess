@@ -12,6 +12,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class RelayStoreTest {
 	private val packetId = PacketId("packet-1")
@@ -42,6 +43,18 @@ class RelayStoreTest {
 
 		assertEquals(1, store.count())
 		assertContentEquals(bytes, store.get(packetId)!!.packet)
+		assertTrue(store.hasPending(packetId))
+		assertTrue(store.contains(packetId))
+	}
+
+	@Test
+	fun terminalRecordHasDedupTombstoneButNoPendingPacket() {
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 100L })
+		store.put(byteArrayOf(1), packetId, 200L, nextHop, NodeId("destination"))
+		store.markTerminal(packetId, DeliveryReceipt(packetId, DeliveryState.Delivered, NodeId("destination"), 100L))
+
+		assertTrue(!store.hasPending(packetId))
+		assertTrue(store.contains(packetId))
 	}
 
 	@Test
