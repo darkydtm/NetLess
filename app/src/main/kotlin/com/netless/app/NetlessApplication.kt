@@ -27,6 +27,7 @@ class AppContainer(application: Application) {
 	val discoveryTransport: DiscoveryTransport = AndroidBleDiscoveryTransport(application)
 	val wifiDirectDiscovery: DiscoveryTransport = WifiDirectDiscoveryTransport(application)
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
+	val messages = MessageRepository(contentStore)
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),

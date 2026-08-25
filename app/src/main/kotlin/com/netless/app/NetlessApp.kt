@@ -19,18 +19,29 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.netless.transport.DiscoveredNode
 
 @Composable
 fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	val state by viewModel.uiState.collectAsStateWithLifecycle()
 	val contacts by container.contacts.contacts.collectAsState()
+	var message by remember { mutableStateOf("") }
+	var messages by remember { mutableStateOf(container.messages.messages("default")) }
 	LaunchedEffect(container) {
 		container.runtimeController.startDiscovery()
 	}
 	when {
 		state.loading -> CircularProgressIndicator(Modifier.semantics { contentDescription = "Loading profile" })
-		else -> ProfileScreen(state, contacts, viewModel::nameChanged, viewModel::bioChanged, viewModel::save)
+		else -> ProfileScreen(state, contacts, messages, message, { message = it }, {
+			if (message.isNotBlank()) {
+				container.messages.send("default", message)
+				messages = container.messages.messages("default")
+				message = ""
+			}
+		}, viewModel::nameChanged, viewModel::bioChanged, viewModel::save)
 	}
 }
 
@@ -38,6 +49,10 @@ fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 private fun ProfileScreen(
 	state: ProfileUiState,
 	contacts: List<DiscoveredNode>,
+	messages: List<com.netless.content.Message>,
+	message: String,
+	onMessageChanged: (String) -> Unit,
+	onSendMessage: () -> Unit,
 	onNameChanged: (String) -> Unit,
 	onBioChanged: (String) -> Unit,
 	onSave: () -> Unit,
@@ -68,6 +83,10 @@ private fun ProfileScreen(
 		state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 		Text("Nearby contacts: ${contacts.size}")
 		contacts.forEach { Text(it.endpoint.address, style = MaterialTheme.typography.bodyMedium) }
+		Text("Messages", style = MaterialTheme.typography.titleMedium)
+		messages.forEach { Text(it.body) }
+		OutlinedTextField(value = message, onValueChange = onMessageChanged, label = { Text("Message") }, modifier = Modifier.fillMaxWidth())
+		Button(onClick = onSendMessage, enabled = message.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send") }
 		Button(onClick = onSave, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
 			Text(if (state.saving) "Saving..." else "Save profile")
 		}
