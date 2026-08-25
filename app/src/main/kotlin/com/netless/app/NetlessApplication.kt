@@ -37,5 +37,6 @@ class AppContainer(application: Application) {
 		wifiDirectDiscovery,
 		contacts,
 		audioRuntime,
+		peerMessages,
 	)
 }
