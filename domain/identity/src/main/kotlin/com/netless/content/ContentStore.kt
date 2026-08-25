@@ -29,6 +29,9 @@ class EncryptedContentStore(private val cipher: ContentCipher) {
 
 	@Synchronized
 	fun get(id: String): ByteArray? = records[id]?.let(cipher::decrypt)
+
+	@Synchronized
+	fun ids(): List<String> = records.keys.toList()
 }
 
 class DurableEncryptedContentStore(
@@ -48,6 +51,11 @@ class DurableEncryptedContentStore(
 
 	@Synchronized
 	fun get(id: String): ByteArray? = records[id]?.let(cipher::decrypt)
+
+	@Synchronized
+	fun ids(): List<String> = records.keys.toList()
+
+	fun seal(content: ByteArray): ByteArray = cipher.encrypt(content)
 
 	private fun load() {
 		if (!file.isFile) return

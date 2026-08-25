@@ -8,7 +8,10 @@ import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import kotlinx.coroutines.flow.Flow
 
+data class Contact(val profileId: ProfileId, val displayName: String, val endpoint: String? = null)
+
 interface IdentityRepository {
+	fun updateContactEndpoint(profileId: String, endpoint: String) = Unit
 	suspend fun getOrCreateIdentity(): DeviceIdentity
 	fun observeProfile(): Flow<Profile>
 	suspend fun updateProfile(command: UpdateProfileCommand): Profile
