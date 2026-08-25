@@ -2,7 +2,7 @@
 
 ## Completion Update
 
-- Implemented conversation-layer decoding of sealed incoming `ContentEnvelope` payloads into persisted unread `ChatMessage` records; malformed payloads remain on the opaque callback path.
+- Implemented versioned conversation payload decoding through `ConversationContentCipher`, with sender signature verification before persisted unread `ChatMessage` records; malformed payloads remain on the opaque callback path.
 - Added live conversation and message projections, restart persistence, contact identity mapping, and delivery-state persistence.
 
 ## Scope
@@ -46,4 +46,4 @@ Implemented persistent conversation message and contact projections over `Durabl
 
 - Conversation sends now bridge to `MeshRuntime` with the selected transport policy instead of a permanent failed stub.
 - Legacy NUL-delimited records are decoded during conversation startup.
-- Incoming relay payloads remain opaque until the established conversation-key envelope format is wired through the repository.
+- Incoming relay payloads remain opaque when signature verification or established conversation-key decryption fails.
