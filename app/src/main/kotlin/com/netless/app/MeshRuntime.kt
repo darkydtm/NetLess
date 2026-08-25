@@ -54,7 +54,7 @@ class MeshRuntime(
 		}
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(canonical(unsigned))
-		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed)
+		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
 		val integrityInput = signed.copy(
 			forwarding = signed.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
@@ -82,10 +82,14 @@ class MeshRuntime(
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
 		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
 		if (packet.forwarding.finalNodeId == localNode) {
-			onContent(packet.content)
-			relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
-			relayStore?.markDelivered(packet.forwarding.packetId)
-			val result = receipt(packet.forwarding.packetId, DeliveryState.Delivered)
+			val result = try {
+				onContent(packet.content)
+				relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
+				relayStore?.markDelivered(packet.forwarding.packetId)
+				receipt(packet.forwarding.packetId, DeliveryState.Delivered)
+			} catch (error: Exception) {
+				receipt(packet.forwarding.packetId, DeliveryState.Failed)
+			}
 			emit(result)
 			return result
 		}
@@ -142,7 +146,7 @@ class MeshRuntime(
 			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
 				is Receipt -> {
 					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && response.value.state == DeliveryState.Delivered)
-					require(hop.nextNodeId == response.value.nodeId) { "receipt sender is not the final hop" }
+					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					finalDelivery = true
 					relayStore?.markDelivered(packetId)
 				}

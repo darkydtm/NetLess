@@ -45,6 +45,7 @@ class WifiDirectDataTransport : DataTransport {
 	}
 
 	private class SessionConnection(private val session: SessionTransport) : TransportConnection {
+		override val peerIdentity: PublicKey? get() = session.peerIdentity
 		override val incomingPackets: Flow<ByteArray> = session.packets()
 		override suspend fun send(packet: ByteArray) = session.send(packet)
 		override suspend fun close() = session.close()

@@ -18,9 +18,8 @@ interface TransportAdapter {
 
 	suspend fun connect(endpoint: TransportEndpoint): TransportConnection
 
-	suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: AuthenticatedConnectionRequest): TransportConnection = connect(endpoint).also {
-		require(it.peerIdentity?.encoded?.contentEquals(request.expectedPeerIdentity.encoded) == true) { "authenticated peer identity mismatch" }
-	}
+	suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: AuthenticatedConnectionRequest): TransportConnection =
+		throw UnsupportedOperationException("authenticated connections are not supported")
 
 	fun supports(capability: DiscoveryCapability): Boolean
 	fun fail() { }

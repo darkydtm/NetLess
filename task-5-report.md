@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 audit correction
+
+- Forwarding now validates terminal receipts against the packet's immutable final destination, while current-hop addressing and per-hop integrity remain enforced at every receive.
+- Generic production adapters now explicitly reject authenticated connections instead of treating an unauthenticated `connect` as authenticated; Wi-Fi Direct exposes the authenticated session peer identity through `SessionConnection`.
+- Control receipts now preserve timestamps and control frames enforce a minimum as well as maximum size; final-content handoff failures return `Failed` observations while retaining relay state.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. The requested real 3-node integration coverage remains unavailable in this environment and is not claimed here.
+
 ## Latest Task 5 High finding
 
 - Forwarding now accepts a validated immediate `HopAcknowledgement` followed by a validated terminal `DeliveryReceipt`, or a terminal receipt directly, and propagates terminal delivery upstream before deleting local relay state.

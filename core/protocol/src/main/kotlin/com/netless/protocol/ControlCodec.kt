@@ -26,7 +26,7 @@ object ControlCodec {
 	}.toByteArray()
 
 	fun receipt(receipt: DeliveryReceipt): ByteArray = ByteArrayOutputStream().also {
-		DataOutputStream(it).apply { writeInt(MAGIC); writeInt(VERSION); writeInt(RECEIPT); writeUTF(receipt.packetId.value); writeUTF(receipt.nodeId.value); writeInt(receipt.state.ordinal) }
+		DataOutputStream(it).apply { writeInt(MAGIC); writeInt(VERSION); writeInt(RECEIPT); writeUTF(receipt.packetId.value); writeUTF(receipt.nodeId.value); writeInt(receipt.state.ordinal); writeLong(receipt.timestampEpochMillis) }
 	}.toByteArray()
 
 	fun decode(bytes: ByteArray): ControlFrame {
