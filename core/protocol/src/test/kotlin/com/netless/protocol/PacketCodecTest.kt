@@ -48,4 +48,12 @@ class PacketCodecTest {
 	fun `delivery receipt is serializable`() {
 		assertTrue(DeliveryReceipt(PacketId("packet-1"), DeliveryState.Delivered, NodeId("node-a"), 20L) is Serializable)
 	}
+
+	@Test
+	fun `codec expiry checks use supplied time`() {
+		val bytes = PacketCodec.encode(packet.copy(expiresAtEpochMillis = 100L), nowMillis = 50L)
+
+		assertEquals(packet.copy(expiresAtEpochMillis = 100L), PacketCodec.decode(bytes, nowMillis = 50L))
+		assertFailsWith<IllegalArgumentException> { PacketCodec.decode(bytes, nowMillis = 100L) }
+	}
 }

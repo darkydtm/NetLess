@@ -2,6 +2,7 @@ package com.netless.database
 
 import com.netless.common.NodeId
 import com.netless.common.PacketId
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -14,7 +15,7 @@ class RelayStoreTest {
 
 	@Test
 	fun storesOpaquePacketAndMetadata() {
-		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()))
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 0L })
 		val bytes = byteArrayOf(1, 2, 3)
 
 		store.put(bytes, packetId, 86_400_000L, nextHop)
@@ -29,7 +30,7 @@ class RelayStoreTest {
 
 	@Test
 	fun duplicatePacketDoesNotCreateASecondRelayEntry() {
-		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()))
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 0L })
 		val bytes = byteArrayOf(1, 2, 3)
 
 		store.put(bytes, packetId, 86_400_000L, nextHop)
@@ -41,7 +42,7 @@ class RelayStoreTest {
 
 	@Test
 	fun acknowledgementRemovesPacket() {
-		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()))
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 0L })
 		store.put(byteArrayOf(1), packetId, 86_400_000L, nextHop)
 
 		store.markDelivered(packetId)
@@ -52,7 +53,7 @@ class RelayStoreTest {
 
 	@Test
 	fun expiryRemovesExpiredPacketsAndReturnsCount() {
-		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()))
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 0L })
 		store.put(byteArrayOf(1), packetId, 100L, nextHop)
 		store.put(byteArrayOf(2), PacketId("packet-2"), 200L, null)
 
@@ -63,10 +64,38 @@ class RelayStoreTest {
 
 	@Test
 	fun rejectsBlankPacketAndExpiredInput() {
-		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()))
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { 100L })
 
 		assertFailsWith<IllegalArgumentException> { store.put(byteArrayOf(), packetId, 1L, null) }
-		assertFailsWith<IllegalArgumentException> { store.put(byteArrayOf(1), packetId, 0L, null) }
+		assertFailsWith<IllegalArgumentException> { store.put(byteArrayOf(1), packetId, 100L, null) }
+	}
+
+	@Test
+	fun persistsAcrossStoreRecreation() {
+		val file = File.createTempFile("relay-store", ".bin")
+		try {
+			file.delete()
+			val keyStore = DatabaseKeyStore(RecordingKeyWrapper())
+			RelayStore(keyStore, file, nowMillis = { 100L }).put(byteArrayOf(1, 2), packetId, 200L, nextHop)
+
+			val restored = RelayStore(keyStore, file, nowMillis = { 100L })
+
+			assertContentEquals(byteArrayOf(1, 2), restored.get(packetId)!!.packet)
+		} finally {
+			file.delete()
+		}
+	}
+
+	@Test
+	fun expiredDeduplicationDoesNotBlockReinsertion() {
+		var now = 100L
+		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), nowMillis = { now })
+		store.put(byteArrayOf(1), packetId, 100L, nextHop)
+		now = 101L
+
+		store.put(byteArrayOf(2), packetId, 200L, nextHop)
+
+		assertContentEquals(byteArrayOf(2), store.get(packetId)!!.packet)
 	}
 }
 

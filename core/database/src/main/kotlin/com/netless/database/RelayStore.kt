@@ -6,6 +6,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.File
 
 enum class RelayState {
 	PENDING,
@@ -24,19 +25,30 @@ class StoredRelayPacket(
 		get() = packetValue.copyOf()
 }
 
-class RelayStore(private val databaseKeyStore: DatabaseKeyStore = DatabaseKeyStore()) {
+class RelayStore(
+	private val databaseKeyStore: DatabaseKeyStore = DatabaseKeyStore(),
+	private val storageFile: File? = null,
+	private val nowMillis: () -> Long = System::currentTimeMillis,
+) {
 	private val records = LinkedHashMap<String, ByteArray>()
 	private val deduplication = HashMap<String, Long>()
+
+	init {
+		load()
+	}
 
 	@Synchronized
 	fun put(packet: ByteArray, packetId: PacketId, expiresAtMillis: Long, nextHop: NodeId?) {
 		require(packet.isNotEmpty()) { "packet must not be empty" }
-		require(expiresAtMillis > 0) { "expiresAtMillis must be positive" }
+		val now = nowMillis()
+		require(expiresAtMillis > now) { "packet must not be expired" }
 
 		val key = key(packetId)
+		expire(now)
 		if (deduplication.containsKey(key)) return
 		records[key] = databaseKeyStore.protect(serialize(packetId, packet, expiresAtMillis, nextHop))
 		deduplication[key] = expiresAtMillis
+		persist()
 	}
 
 	@Synchronized
@@ -47,6 +59,7 @@ class RelayStore(private val databaseKeyStore: DatabaseKeyStore = DatabaseKeySto
 	@Synchronized
 	fun markDelivered(packetId: PacketId) {
 		records.remove(key(packetId))
+		persist()
 	}
 
 	@Synchronized
@@ -56,6 +69,7 @@ class RelayStore(private val databaseKeyStore: DatabaseKeyStore = DatabaseKeySto
 			records.remove(it)
 			deduplication.remove(it)
 		}
+		if (expired.isNotEmpty()) persist()
 		return expired.size
 	}
 
@@ -63,6 +77,38 @@ class RelayStore(private val databaseKeyStore: DatabaseKeyStore = DatabaseKeySto
 	fun count(): Int = records.size
 
 	private fun key(packetId: PacketId): String = "relay:${packetId.value}"
+
+	private fun load() {
+		val file = storageFile ?: return
+		if (!file.isFile || file.length() == 0L) return
+		DataInputStream(file.inputStream().buffered()).use { input ->
+			repeat(input.readInt()) {
+				val key = input.readUTF()
+				deduplication[key] = input.readLong()
+				if (input.readBoolean()) records[key] = input.readBytes()
+			}
+		}
+	}
+
+	private fun persist() {
+		val file = storageFile ?: return
+		file.parentFile?.mkdirs()
+		file.outputStream().buffered().use { stream ->
+			DataOutputStream(stream).use { output ->
+				output.writeInt(deduplication.size)
+				deduplication.forEach { (key, expiry) ->
+					output.writeUTF(key)
+					output.writeLong(expiry)
+					val value = records[key]
+					output.writeBoolean(value != null)
+					if (value != null) {
+						output.writeInt(value.size)
+						output.write(value)
+					}
+				}
+			}
+		}
+	}
 
 	private fun serialize(packetId: PacketId, packet: ByteArray, expiresAtMillis: Long, nextHop: NodeId?): ByteArray =
 		ByteArrayOutputStream().use { bytes ->

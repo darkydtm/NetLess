@@ -19,9 +19,9 @@ object PacketCodec {
 	private const val MAX_BINARY_BYTES = 16 * 1024 * 1024
 	private const val MAX_RECIPIENTS = 1_024
 
-	fun encode(packet: PacketEnvelope): ByteArray {
+	fun encode(packet: PacketEnvelope, nowMillis: Long = System.currentTimeMillis()): ByteArray {
 		checkVersion(packet.version)
-		require(packet.expiresAtEpochMillis >= System.currentTimeMillis()) { "Packet has expired" }
+		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
 		return ByteArrayOutputStream().use { output ->
 			DataOutputStream(output).use { data ->
 				data.writeInt(packet.version)
@@ -34,7 +34,7 @@ object PacketCodec {
 		}
 	}
 
-	fun decode(bytes: ByteArray): PacketEnvelope {
+	fun decode(bytes: ByteArray, nowMillis: Long = System.currentTimeMillis()): PacketEnvelope {
 		require(bytes.isNotEmpty()) { "Packet bytes must not be empty" }
 		try {
 			DataInputStream(ByteArrayInputStream(bytes)).use { input ->
@@ -43,7 +43,7 @@ object PacketCodec {
 				val createdAt = input.readLong()
 				val expiresAt = input.readLong()
 				val packet = PacketEnvelope(readForwarding(input), readContent(input), version, createdAt, expiresAt)
-				require(expiresAt >= System.currentTimeMillis()) { "Packet has expired" }
+				require(expiresAt >= nowMillis) { "Packet has expired" }
 				require(input.available() == 0) { "Trailing packet bytes" }
 				packet
 			}
