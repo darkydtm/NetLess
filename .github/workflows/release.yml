@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager --licenses >/dev/null
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Restore release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.NETLESS_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/netless-release.jks"
+
+      - name: Build signed release
+        env:
+          NETLESS_KEYSTORE: ${{ runner.temp }}/netless-release.jks
+          NETLESS_STORE_PASSWORD: ${{ secrets.NETLESS_STORE_PASSWORD }}
+          NETLESS_KEY_ALIAS: ${{ secrets.NETLESS_KEY_ALIAS }}
+          NETLESS_KEY_PASSWORD: ${{ secrets.NETLESS_KEY_PASSWORD }}
+        run: |
+          test -n "$NETLESS_STORE_PASSWORD"
+          test -n "$NETLESS_KEY_ALIAS"
+          test -n "$NETLESS_KEY_PASSWORD"
+          gradle --no-daemon --stacktrace assembleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netless-release-${{ github.run_number }}
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/netless-release.jks"
