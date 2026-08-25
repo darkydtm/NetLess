@@ -33,7 +33,7 @@ class AppContainer(application: Application) {
 	val wifiDirect = com.netless.transport.WifiDirectDataTransport()
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
 	val messages = MessageRepository(contentStore)
-	val peerMessages = PeerMessageRuntime(identityRepository, messages, wifiDirect)
+	val peerMessages = PeerMessageRuntime(identityRepository, messages, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport)
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),

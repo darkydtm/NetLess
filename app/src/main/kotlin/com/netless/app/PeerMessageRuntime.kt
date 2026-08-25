@@ -4,6 +4,7 @@ import com.netless.crypto.PublicKey
 import com.netless.identity.IdentityRepository
 import com.netless.transport.WifiDirectDataTransport
 import com.netless.transport.SessionTransport
+import com.netless.transport.TransportEndpoint
 import java.nio.charset.StandardCharsets
 import java.net.ServerSocket
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,7 @@ class PeerMessageRuntime(
 	private val identity: IdentityRepository,
 	private val messages: MessageRepository,
 	private val wifi: WifiDirectDataTransport,
+	private val wifiDiscovery: WifiDirectDiscoveryTransport? = null,
 ) {
 	private var serverJob: Job? = null
 	private var serverPort: Int = 0
@@ -54,7 +56,8 @@ class PeerMessageRuntime(
 	suspend fun send(endpoint: com.netless.transport.TransportEndpoint, conversationId: String, body: String) {
 		val peerKey = endpoint.metadata["identityKey"]?.let { PublicKey(java.util.Base64.getDecoder().decode(it)) }
 			?: error("peer identity key is missing")
-		val connection = wifi.connectAuthenticated(endpoint, 1, endpoint.metadata["sessionId"] ?: error("session id is missing"), identity.getOrCreateIdentity().publicKey, identity::sign, identity::verify)
+		val host = wifiDiscovery?.connectPeer(endpoint) ?: endpoint.address
+		val connection = wifi.connectAuthenticated(TransportEndpoint(endpoint.nodeId, host, endpoint.metadata), 1, endpoint.metadata["sessionId"] ?: error("session id is missing"), identity.getOrCreateIdentity().publicKey, identity::sign, identity::verify)
 		connection.send(MessageFrame.encode(conversationId, body))
 		connection.close()
 	}
