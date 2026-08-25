@@ -54,8 +54,8 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 
 @Composable fun ConversationScreen(state: MessengerUiState, viewModel: MessengerViewModel, modifier: Modifier = Modifier) {
 	Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-		Text(state.conversations.firstOrNull { it.id == state.selectedConversation }?.title ?: "Conversation", style = MaterialTheme.typography.titleLarge)
-		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.messages) { message -> Text(message.body); Text(message.deliveryState.name, style = MaterialTheme.typography.labelMedium) } }
+		Text(state.conversations.firstOrNull { it.id == state.selectedConversation }?.title ?: "Select a contact", style = MaterialTheme.typography.titleLarge)
+		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.messages) { message -> Text(message.body); Text(state.deliveryByMessageId[message.id] ?: message.deliveryState.name, style = MaterialTheme.typography.labelMedium) } }
 		state.deliveryLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
 		Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f), label = { Text("Message") }); Button({ viewModel.send() }, enabled = state.draft.isNotBlank(), modifier = Modifier.semantics { contentDescription = "Send message" }) { Text("Send") } }
 	}

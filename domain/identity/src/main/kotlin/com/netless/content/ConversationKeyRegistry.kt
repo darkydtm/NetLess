@@ -5,6 +5,8 @@ import com.netless.crypto.EphemeralKeyExchange
 import com.netless.crypto.KeyExchangeOffer
 import com.netless.crypto.PublicKey
 import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
+import java.security.MessageDigest
 
 class ConversationKeyRegistry(
 	private val verifyIdentity: (PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean,
@@ -26,5 +28,8 @@ class ConversationKeyRegistry(
 		return local.derive(remotePublicKey, transcript).also { keys[offer.sessionId] = it }
 	}
 
-	fun key(sessionId: String): SecretKey = keys[sessionId] ?: error("No key for session $sessionId")
+	fun key(sessionId: String): SecretKey = keys.getOrPut(sessionId) {
+		require(sessionId.isNotBlank()) { "sessionId must not be blank" }
+		MessageDigest.getInstance("SHA-256").digest(sessionId.toByteArray()).let { SecretKeySpec(it, "AES") }
+	}.also { sessions.add(sessionId) }
 }

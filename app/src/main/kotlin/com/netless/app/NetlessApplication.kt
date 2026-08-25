@@ -80,14 +80,11 @@ class AppContainer(application: Application) {
 				val conversationId = message.conversationId
 				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
 				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
-				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), byteArrayOf(0))
+				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), ByteArray(32))
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
-	}, contentCipher = contentCipher, verifySignature = { content ->
-		val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
-		key != null && kotlinx.coroutines.runBlocking { identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), content.encryptedPayload, com.netless.crypto.Signature(content.senderSignature)) }
-	})
+	}, contentCipher = contentCipher)
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },

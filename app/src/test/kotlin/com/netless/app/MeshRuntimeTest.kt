@@ -164,7 +164,7 @@ class MeshRuntimeTest {
 			content().copy(senderSignature = byteArrayOf(9)), createdAtEpochMillis = 100, expiresAtEpochMillis = Long.MAX_VALUE,
 		)
 		val now = 1000L
-		val input = packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)), content = packet.content.copy(senderSignature = byteArrayOf(0)))
+		val input = packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = ByteArray(32)), content = packet.content.copy(senderSignature = ByteArray(32)))
 		val bytes = com.netless.protocol.VersionedPacketCodec.encode(packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = MessageDigest.getInstance("SHA-256").digest(com.netless.protocol.VersionedPacketCodec.encode(input, now)))))
 
 		network.runtime(NodeId("relay"), now).receive(bytes, TransportType.Bluetooth)
@@ -243,7 +243,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			require(request.sessionId == "${type.name}:${peer.value}")
 			require(request.protocolVersion == 1)
 			val challenge = sessionChallenge(request.protocolVersion, request.sessionId, request.expectedPeerIdentity)
-			val signature = if (network.forgeSession) Signature(byteArrayOf(0)) else request.sign(challenge)
+				val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
 			require(request.verify(request.expectedPeerIdentity, challenge, signature)) { "forged session rejected" }
 			network.usedTransports += type
 			return object : TransportConnection {
@@ -339,7 +339,7 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		require(request.expectedPeerIdentity == network.identityKey)
 		require(request.sessionId == "${type.name}:${endpoint.nodeId.value}" && request.protocolVersion == 1)
 		val challenge = "${request.protocolVersion}:${request.sessionId}".encodeToByteArray() + request.expectedPeerIdentity.encoded
-		val signature = if (network.forgeSession) Signature(byteArrayOf(0)) else request.sign(challenge)
+		val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
 		require(request.verify(network.identityKey, challenge, signature)) { "forged session rejected" }
 		return connect(endpoint)
 	}

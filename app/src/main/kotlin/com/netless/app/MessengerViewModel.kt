@@ -19,8 +19,8 @@ data class ConversationUiState(val id: String, val title: String, val preview: S
 
 data class MessengerUiState(
 	val currentTab: MessengerTab = MessengerTab.Chats,
-	val conversations: List<ConversationUiState> = listOf(ConversationUiState("default", "Netless", "Start a private conversation")),
-	val selectedConversation: String = "default",
+	val conversations: List<ConversationUiState> = emptyList(),
+	val selectedConversation: String? = null,
 	val draft: String = "",
 	val deliveryLabel: String? = null,
 	val networkPolicy: TransportPolicy = TransportPolicy.Automatic(),
@@ -39,8 +39,8 @@ class MessengerViewModel(
 
 	init {
 		repository?.let { repo ->
-			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }) } } }
-			viewModelScope.launch { _uiState.flatMapLatest { repo.observeMessages(it.selectedConversation) }.collect { messages -> _uiState.update { it.copy(messages = messages) } } }
+			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }, selectedConversation = state.selectedConversation ?: summaries.firstOrNull()?.conversationId) } } }
+			viewModelScope.launch { _uiState.flatMapLatest { repo.observeMessages(it.selectedConversation ?: "") }.collect { messages -> _uiState.update { it.copy(messages = messages, deliveryByMessageId = messages.associate { message -> message.id to message.deliveryState.name }) } } }
 		}
 	}
 
@@ -61,7 +61,7 @@ class MessengerViewModel(
 
 	fun send(text: String = uiState.value.draft) {
 		if (text.isBlank()) return
-		val conversation = uiState.value.selectedConversation
+		val conversation = uiState.value.selectedConversation ?: return
 		_uiState.update { state ->
 			state.copy(
 				draft = "",
