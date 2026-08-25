@@ -27,3 +27,9 @@
 - Persisted discovered identity metadata through the shared contact store and bound incoming content to a stored contact and matching conversation.
 
 Verification: `git diff --check` passed. Tests could not run because this checkout has no Gradle wrapper or system Gradle executable.
+
+## Latest Security Follow-up
+
+- Made `ContactStore` authoritative and injected the local profile into conversation routing.
+- Added explicit profile-to-conversation authorization and local-recipient checks.
+- Validated manual identity-key encoding and public-key length; bounded discovery metadata and payload decoding.

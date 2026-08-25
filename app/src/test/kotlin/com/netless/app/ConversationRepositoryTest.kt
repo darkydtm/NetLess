@@ -11,6 +11,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
+import com.netless.common.ProfileId
+import com.netless.common.NodeId
+import com.netless.transport.TransportEndpoint
+import java.util.Base64
 
 class ConversationRepositoryTest {
 	@Test
@@ -18,7 +22,7 @@ class ConversationRepositoryTest {
 		val file = File.createTempFile("conversation", ".db").also { it.delete() }
 		val store = DurableEncryptedContentStore(file, PlainCipher)
 		val first = repository(store)
-		first.addContact("profile", "Alex", "node", "endpoint", "identity-key")
+		first.addContact("profile", "Alex", "node", "endpoint", Base64.getEncoder().encodeToString(ByteArray(32)))
 		first.send("conversation", "hello", SendPolicy.Automatic).first()
 
 		val restored = repository(DurableEncryptedContentStore(file, PlainCipher))
@@ -29,14 +33,14 @@ class ConversationRepositoryTest {
 	@Test
 	fun `contact identity does not depend on endpoint`() = runTest {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
-		repository.addContact("profile", "Alex", "node", "endpoint", "identity-key")
-		assertEquals(Contact("profile", "Alex", "node", "endpoint", "identity-key"), repository.contacts().single())
+		repository.addContact("profile", "Alex", "node", "endpoint", Base64.getEncoder().encodeToString(ByteArray(32)))
+		assertEquals("profile", repository.contacts().single().profileId)
 	}
 
 	@Test
 	fun `contact requires complete identity route`() {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
-		kotlin.test.assertFailsWith<IllegalArgumentException> { repository.addContact("profile", "Alex", "", "endpoint", "identity-key") }
+		kotlin.test.assertFailsWith<IllegalArgumentException> { repository.addContact("profile", "Alex", "", "endpoint", "bad") }
 	}
 
 	@Test
@@ -57,5 +61,5 @@ private class FakeSender : MessageSender {
 
 private fun repository(store: DurableEncryptedContentStore): ConversationRepository {
 	val keys = ConversationKeyRegistry { _, _, _ -> true }.also { it.register("conversation", KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) }
-	return ConversationRepository(store, FakeSender(), ConversationContentCipher(keys))
+	return ConversationRepository(store, FakeSender(), ConversationContentCipher(keys), ContactStore(store), "local")
 }

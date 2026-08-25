@@ -32,6 +32,9 @@ import kotlinx.coroutines.channels.awaitClose
 
 object BleAdvertisementCodec {
 	private const val VERSION = 1
+	private const val MAX_METADATA_ENTRIES = 32
+	private const val MAX_METADATA_FIELD_BYTES = 512
+	private const val MAX_PAYLOAD_BYTES = 8 * 1024
 
 	fun encode(advertisement: DiscoveryAdvertisement): ByteArray = ByteArrayOutputStream().also { output ->
 		DataOutputStream(output).use { data ->
@@ -47,14 +50,21 @@ object BleAdvertisementCodec {
 	}.toByteArray()
 
 	fun decode(bytes: ByteArray): DiscoveryAdvertisement = DataInputStream(ByteArrayInputStream(bytes)).use { data ->
+		require(bytes.size <= MAX_PAYLOAD_BYTES) { "Discovery advertisement is too large" }
 		require(data.readUnsignedByte() == VERSION) { "Unsupported BLE advertisement version" }
 		val discoveryHash = data.readUTF()
 		val protocolVersion = data.readInt()
 		val sessionId = data.readUTF()
 		val capabilityMask = data.readInt()
 		val transportMask = data.readInt()
+		val metadataCount = data.readInt()
+		require(metadataCount in 0..MAX_METADATA_ENTRIES) { "Too many discovery metadata entries" }
 		val metadata = buildMap {
-			repeat(data.readInt()) { put(data.readUTF(), data.readUTF()) }
+			repeat(metadataCount) {
+				val key = data.readUTF(); val value = data.readUTF()
+				require(key.encodeToByteArray().size <= MAX_METADATA_FIELD_BYTES && value.encodeToByteArray().size <= MAX_METADATA_FIELD_BYTES) { "Discovery metadata field is too large" }
+				put(key, value)
+			}
 		}
 		val capabilities = DiscoveryCapability.values().filter { capabilityMask and (1 shl it.ordinal) != 0 }
 		val transportHints = TransportType.values().filter { transportMask and (1 shl it.ordinal) != 0 }
@@ -84,6 +94,13 @@ class ContactStore(private val store: com.netless.content.DurableEncryptedConten
 		}
 		upsert(DiscoveredNode(nodeId, TransportEndpoint(nodeId, endpoint.address, metadata), TransportCapabilities(true, true, 1, true, true)))
 	}
+
+	fun upsert(profileId: com.netless.common.ProfileId, displayName: String, nodeId: NodeId, endpoint: TransportEndpoint, identityKey: String) {
+		require(displayName.isNotBlank())
+		upsert(profileId, nodeId, TransportEndpoint(nodeId, endpoint.address, endpoint.metadata + ("displayName" to displayName)), identityKey)
+	}
+
+	fun contact(profileId: String): DiscoveredNode? = contactsByNode.values.firstOrNull { it.endpoint.metadata["profileId"] == profileId }
 
 	@Synchronized
 	fun remove(nodeId: NodeId) {

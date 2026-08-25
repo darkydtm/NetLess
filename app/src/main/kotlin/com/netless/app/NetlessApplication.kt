@@ -85,7 +85,7 @@ class AppContainer(application: Application) {
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
-	}, contentCipher = contentCipher, contactStore = contacts)
+	}, contentCipher = contentCipher, contactStore = contacts, localProfileId = localIdentity.profileId.value)
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },
