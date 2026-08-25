@@ -53,7 +53,7 @@ class MeshRuntime(
 			return receipt(packetId, DeliveryState.Failed).also(::emit)
 		}
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
-		val signature = signPacket(canonical(unsigned))
+		val signature = signPacket(canonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
 		val integrityInput = signed.copy(
@@ -62,7 +62,7 @@ class MeshRuntime(
 		)
 		val bytes = codec.encode(signed.copy(forwarding = signed.forwarding.copy(perHopIntegrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(integrityInput, now)))), now)
 		relayStore?.put(bytes, packetId, selected.expiresAtMillis, selected.hops.firstOrNull()?.nextNodeId)
-		return forward(bytes, packetId, selected.hops.firstOrNull())
+		return forward(bytes, packetId, selected.hops.firstOrNull(), now)
 	}
 
 	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
@@ -70,8 +70,8 @@ class MeshRuntime(
 		val packet = try {
 			codec.decode(bytes, now).also {
 				require(it.forwarding.currentNodeId == localNode && (it.forwarding.nextHop == null || it.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
-				require(validIntegrity(it, bytes)) { "packet integrity check failed" }
-				require(verifySenderSignature(it, canonical(it))) { "packet signature check failed" }
+				require(validIntegrity(it, bytes, now)) { "packet integrity check failed" }
+				require(verifySenderSignature(it, canonical(it, now))) { "packet signature check failed" }
 			}
 		} catch (error: Exception) {
 			val packetId = runCatching { codec.decode(bytes, now).forwarding.packetId }.getOrNull()
@@ -100,7 +100,7 @@ class MeshRuntime(
 		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(rewritten, now))
 		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
 		relayStore?.put(forwardedBytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
-		return forward(forwardedBytes, packet.forwarding.packetId, hop)
+		return forward(forwardedBytes, packet.forwarding.packetId, hop, now)
 	}
 
 	suspend fun receiveFrame(frame: ByteArray, ingress: TransportType): ByteArray {
@@ -112,6 +112,7 @@ class MeshRuntime(
 			is Acknowledgement -> frame
 			is Receipt -> {
 				require(decoded.value.state == DeliveryState.Delivered) { "non-terminal receipt" }
+				require(decoded.value.timestampEpochMillis <= nowMillis()) { "receipt timestamp is in the future" }
 				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
 				require(stored.state == com.netless.database.RelayState.PENDING && stored.nextHop != null) { "receipt is not admitted" }
 				require(stored.nextHop != null) { "receipt has no pending downstream relay" }
@@ -130,7 +131,7 @@ class MeshRuntime(
 		deliveries.getOrPut(packetId) { MutableStateFlow(null) }
 	}.asStateFlow().filter { it != null }.let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(it!!) } } }
 
-	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?): DeliveryReceipt {
+	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?, now: Long = nowMillis()): DeliveryReceipt {
 		if (hop == null) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		require(hop.endpoint.nodeId == hop.nextNodeId) { "endpoint node identity does not match route hop" }
 		require(hop.endpoint.metadata["nodeId"] == hop.nextNodeId.value) { "missing or inconsistent endpoint node identity" }
@@ -146,6 +147,7 @@ class MeshRuntime(
 			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
 				is Receipt -> {
 					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && response.value.state == DeliveryState.Delivered)
+					require(response.value.timestampEpochMillis <= now) { "receipt timestamp is in the future" }
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					finalDelivery = true
 					relayStore?.markDelivered(packetId)
@@ -179,20 +181,20 @@ class MeshRuntime(
 		deliveries.getOrPut(receipt.packetId) { MutableStateFlow(null) }.value = receipt
 	}
 
-	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray): Boolean {
+	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray, now: Long): Boolean {
 		val supplied = packet.forwarding.perHopIntegrity
 		val blank = packet.copy(
 			forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
 			content = packet.content.copy(senderSignature = byteArrayOf(0)),
 		)
-		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(blank, packet.createdAtEpochMillis))
+		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(blank, now))
 		return supplied.contentEquals(expected)
 	}
 
-	private fun canonical(packet: PacketEnvelope): ByteArray = codec.encode(packet.copy(
+	private fun canonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
 		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(1)),
 		content = packet.content.copy(senderSignature = byteArrayOf(0)),
-	), packet.createdAtEpochMillis)
+	), now)
 
 	private fun receipt(packetId: PacketId, state: DeliveryState) = DeliveryReceipt(packetId, state, localNode, nowMillis())
 }

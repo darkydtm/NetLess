@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 audit blockers
+
+- Threaded one captured clock value through packet signing, per-hop integrity, codec encoding/decoding, and forwarding response validation so relay and destination use the same canonical packet timestamp and fields; removed the undefined `now` reference in `forward`.
+- Control receipt decoding now preserves the encoded `long`; receipt ingress and forwarding reject future-dated receipts.
+- The requested real three-node transport integration test was not added in this pass; existing tests still use the prior adapter shortcut and do not satisfy that audit requirement.
+
+Verification: `git diff --check` passed. Gradle tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 audit correction
 
 - Forwarding now validates terminal receipts against the packet's immutable final destination, while current-hop addressing and per-hop integrity remain enforced at every receive.

@@ -38,7 +38,7 @@ object ControlCodec {
 			else -> when (input.readInt()) {
 				FORWARD -> input.readInt().let { size -> require(size in 0..MAX_FRAME && size <= input.available()) { "invalid control payload length" }; Forward(input.readNBytes(size)) }
 				ACK -> input.readUTF().let { packetId -> require(packetId.length <= MAX_TEXT); val node = input.readUTF(); require(node.length <= MAX_TEXT); val status = input.readInt(); require(status == 0 || status == 1); Acknowledgement(HopAcknowledgement(PacketId(packetId), NodeId(node), status == 0, status, input.readBoolean())) }
-				RECEIPT -> { val packet = input.readUTF(); val node = input.readUTF(); val state = input.readInt(); require(state in DeliveryState.values().indices); Receipt(DeliveryReceipt(PacketId(packet), DeliveryState.values()[state], NodeId(node), 0L)) }
+				RECEIPT -> { val packet = input.readUTF(); val node = input.readUTF(); val state = input.readInt(); require(state in DeliveryState.values().indices); Receipt(DeliveryReceipt(PacketId(packet), DeliveryState.values()[state], NodeId(node), input.readLong())) }
 				else -> error("unknown control frame")
 			}
 		}
