@@ -114,6 +114,13 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Final Task 5 blockers
+
+- Replaced repeated cold-flow `incomingPackets.first()` subscriptions with one connection stream collector and queue; ordered acknowledgement plus terminal receipt and single-frame terminal delivery are both consumed correctly.
+- `RelayStore` deserialization rejects persisted non-delivered terminal receipt states, and `markTerminal` explicitly fails for unknown packet IDs.
+
+Verification: `git diff --check` passed. Focused Gradle tests could not run because this checkout has no Gradle wrapper and no system Gradle executable.
+
 ## Final Task 5 review findings
 
 - Separated `RelayStore.hasPending` from `contains`: terminal records remain dedup tombstones without pending packet presence.

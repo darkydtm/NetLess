@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import java.util.UUID
 import java.security.MessageDigest
 import com.netless.crypto.PublicKey
@@ -155,8 +158,11 @@ class MeshRuntime(
 				require(localIdentity != null && signSession != null && verifySession != null) { "authenticated transport configuration is required" }
 				val connection = adapter.connectAuthenticated(hop.endpoint, com.netless.transport.AuthenticatedConnectionRequest(expectedKey, hop.endpoint.metadata["sessionId"] ?: UUID.randomUUID().toString(), 1, signSession!!, verifySession!!))
 				require(connection.peerIdentity == expectedKey) { "authenticated peer identity does not match route hop" }
-				connection.send(ControlCodec.forward(bytes))
-			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
+				coroutineScope {
+					val incoming = Channel<ByteArray>(Channel.UNLIMITED)
+					val collector = launch { connection.incomingPackets.collect { incoming.send(it) } }
+					connection.send(ControlCodec.forward(bytes))
+					when (val response = ControlCodec.decode(incoming.receive())) {
 				is Receipt -> {
 					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId)
 					require(response.value.timestampEpochMillis <= now) { "receipt timestamp is in the future" }
@@ -173,14 +179,16 @@ class MeshRuntime(
 						propagatedReceipt = DeliveryReceipt(packetId, DeliveryState.Delivered, hop.nextNodeId, now)
 						relayStore?.markTerminal(packetId, propagatedReceipt!!)
 					} else {
-						val receipt = ControlCodec.decode(connection.incomingPackets.first())
+						val receipt = ControlCodec.decode(incoming.receive())
 						require(receipt is Receipt && receipt.value.packetId == packetId && receipt.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && receipt.value.state == DeliveryState.Delivered)
 						propagatedReceipt = receipt.value
 						relayStore?.markTerminal(packetId, propagatedReceipt!!)
 					}
 				}
 				else -> error("unexpected control response")
-			}
+					}
+					collector.cancel()
+				}
 				connection.close()
 			} catch (error: Exception) {
 				try { adapter.fail() } catch (_: Exception) { }

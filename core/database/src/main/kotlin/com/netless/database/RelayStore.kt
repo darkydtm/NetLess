@@ -121,7 +121,7 @@ class RelayStore(
 		withFileLock {
 			load()
 			val key = key(packetId)
-			val stored = records[key] ?: return@withFileLock
+			val stored = records[key] ?: error("unknown relay packet")
 			val packet = deserialize(databaseKeyStore.unprotect(stored))
 			require(receipt.packetId == packetId) { "receipt packet id does not match" }
 			require(receipt.state == DeliveryState.Delivered) { "receipt is not terminal" }
@@ -289,7 +289,9 @@ class RelayStore(
 		val expiresAtMillis = input.readLong()
 		val nextHop = if (input.readBoolean()) NodeId(input.readUTF()) else null
 		val finalDestination = if (legacy) null else if (input.readBoolean()) NodeId(input.readUTF()) else null
-		val receipt = if (!legacy && input.readBoolean()) DeliveryReceipt(packetId, DeliveryState.valueOf(input.readUTF()), NodeId(input.readUTF()), input.readLong()) else null
+		val receipt = if (!legacy && input.readBoolean()) DeliveryReceipt(packetId, DeliveryState.valueOf(input.readUTF()), NodeId(input.readUTF()), input.readLong()).also {
+			require(it.state == DeliveryState.Delivered) { "invalid terminal receipt state" }
+		} else null
 		val size = input.readInt()
 		require(size in 1..MAX_PACKET_BYTES) { "invalid packet size" }
 		val packet = ByteArray(size).also(input::readFully)
