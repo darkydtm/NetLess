@@ -37,6 +37,9 @@ class MeshRuntime(
 	private val signPacket: suspend (ByteArray) -> ByteArray = { byteArrayOf() },
 	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { _, _ -> false },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
+	private val localIdentity: PublicKey? = null,
+	private val signSession: (suspend (ByteArray) -> Signature)? = null,
+	private val verifySession: (suspend (PublicKey, ByteArray, Signature) -> Boolean)? = null,
 ) {
 	private val deliveries = mutableMapOf<PacketId, MutableStateFlow<DeliveryReceipt?>>()
 	private val deliveryLock = Any()
@@ -92,7 +95,7 @@ class MeshRuntime(
 		return when (val decoded = ControlCodec.decode(frame)) {
 			is com.netless.protocol.Forward -> {
 				val receipt = receive(decoded.packet, ingress)
-				ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0))
+				ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0, receipt.state == DeliveryState.Delivered))
 			}
 			is Acknowledgement -> frame
 		}
@@ -109,20 +112,23 @@ class MeshRuntime(
 		require(!hop.endpoint.metadata["identityKey"].isNullOrBlank()) { "missing endpoint identity key" }
 		val adapter = transports.available(hop.transport)
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
-			try {
-				val connection = adapter.connect(hop.endpoint)
+		var finalDelivery = false
+		try {
 				val expectedKey = com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(hop.endpoint.metadata.getValue("identityKey")))
-				require(expectedKey != null && connection.peerIdentity?.encoded?.contentEquals(expectedKey.encoded) == true) { "session identity does not match endpoint" }
+				require(localIdentity != null && signSession != null && verifySession != null) { "authenticated transport configuration is required" }
+				val connection = adapter.connectAuthenticated(hop.endpoint, com.netless.transport.AuthenticatedConnectionRequest(expectedKey, hop.endpoint.metadata["sessionId"] ?: UUID.randomUUID().toString(), 1, signSession!!, verifySession!!))
 				connection.send(ControlCodec.forward(bytes))
 				val acknowledgement = connection.incomingPackets.first()
 				val ack = ControlCodec.decode(acknowledgement)
 				require(ack is Acknowledgement && ack.value.packetId == packetId && ack.value.nodeId == hop.nextNodeId && ack.value.accepted)
+				finalDelivery = ack.value.finalDelivery
+				if (ack.value.finalDelivery) relayStore?.markDelivered(packetId)
 				connection.close()
 			} catch (error: Exception) {
 				try { adapter.fail() } catch (_: Exception) { }
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}
-		val result = receipt(packetId, DeliveryState.Relaying)
+		val result = if (finalDelivery) receipt(packetId, DeliveryState.Delivered) else receipt(packetId, DeliveryState.Relaying)
 		emit(result)
 		return result
 	}

@@ -81,4 +81,12 @@ Verification: `git diff --check` passed. Kotlin tests could not run because this
 
 Verification: `git diff --check` passed. Kotlin tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
 
-Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The full three-node forged/duplicate/failure integration scenarios remain unverified in this environment.
+ Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The full three-node forged/duplicate/failure integration scenarios remain unverified in this environment.
+
+## Final Blocker Fixes
+
+- Added `TransportAdapter.connectAuthenticated` with explicit expected peer identity and session metadata; generic adapters retain a workable identity-checking default, while the Wi-Fi Direct production adapter performs the existing authenticated handshake.
+- Added final-delivery state to acknowledgement control frames. A relay now propagates final delivery upstream and deletes its stored packet only after that receipt; hop acceptance alone remains pending.
+- `PeerMessageRuntime` remains explicitly authenticated in production through `AppContainer`; no unauthenticated startup path is claimed.
+
+Verification: `git diff --check` passed. Kotlin/Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. Focused multi-instance forged-ack and failure tests remain environment-limited.

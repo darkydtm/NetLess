@@ -24,6 +24,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import com.netless.crypto.PublicKey
+import com.netless.crypto.Signature
 import com.netless.database.RelayStore
 import java.util.Base64
 
@@ -71,6 +72,11 @@ private class FakeNetwork {
 			Route(listOf(NodeId("local"), NodeId("relay"), destination), metrics(), hops = hops)
 		},
 		relayStore = relayStore,
+		signPacket = { byteArrayOf(9) },
+		verifySenderSignature = { _, _ -> true },
+		localIdentity = identityKey,
+		signSession = { Signature(byteArrayOf(9)) },
+		verifySession = { _, _, _ -> true },
 	)
 
 	private fun endpoint(type: TransportType, node: String) = TransportEndpoint(NodeId(node), type.name, mapOf(
