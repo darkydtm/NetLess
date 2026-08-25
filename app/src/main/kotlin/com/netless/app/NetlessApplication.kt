@@ -10,6 +10,10 @@ import com.netless.content.DurableEncryptedContentStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import com.netless.transport.DiscoveryAdvertisement
+import com.netless.transport.DiscoveryCapability
+import com.netless.transport.TransportType
+import java.util.UUID
 
 class NetlessApplication : Application() {
 	lateinit var container: AppContainer
@@ -38,5 +42,16 @@ class AppContainer(application: Application) {
 		contacts,
 		audioRuntime,
 		peerMessages,
+		{ port ->
+			val identity = runCatching { kotlinx.coroutines.runBlocking { identityRepository.getOrCreateIdentity() } }.getOrNull() ?: return@RuntimeController null
+			DiscoveryAdvertisement(
+				identity.profileId.value,
+				1,
+				UUID.randomUUID().toString(),
+				setOf(DiscoveryCapability.Relay, DiscoveryCapability.AcceptIncoming),
+				setOf(TransportType.WifiDirect),
+				mapOf("port" to port.toString(), "identityKey" to java.util.Base64.getEncoder().encodeToString(identity.publicKey.encoded)),
+			)
+		},
 	)
 }

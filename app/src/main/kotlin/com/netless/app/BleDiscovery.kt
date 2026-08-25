@@ -41,6 +41,8 @@ object BleAdvertisementCodec {
 			data.writeUTF(advertisement.sessionId)
 			data.writeInt(advertisement.capabilities.fold(0) { mask, capability -> mask or (1 shl capability.ordinal) })
 			data.writeInt(advertisement.transportHints.fold(0) { mask, type -> mask or (1 shl type.ordinal) })
+			data.writeInt(advertisement.metadata.size)
+			advertisement.metadata.forEach { (key, value) -> data.writeUTF(key); data.writeUTF(value) }
 		}
 	}.toByteArray()
 
@@ -51,9 +53,12 @@ object BleAdvertisementCodec {
 		val sessionId = data.readUTF()
 		val capabilityMask = data.readInt()
 		val transportMask = data.readInt()
+		val metadata = buildMap {
+			repeat(data.readInt()) { put(data.readUTF(), data.readUTF()) }
+		}
 		val capabilities = DiscoveryCapability.values().filter { capabilityMask and (1 shl it.ordinal) != 0 }
 		val transportHints = TransportType.values().filter { transportMask and (1 shl it.ordinal) != 0 }
-		DiscoveryAdvertisement(discoveryHash, protocolVersion, sessionId, capabilities.toSet(), transportHints.toSet())
+		DiscoveryAdvertisement(discoveryHash, protocolVersion, sessionId, capabilities.toSet(), transportHints.toSet(), metadata)
 	}
 }
 
@@ -95,7 +100,7 @@ class AndroidBleDiscoveryTransport(context: Context) : com.netless.transport.Dis
 				val endpoint = TransportEndpoint(
 					NodeId(advertisement.discoveryHash),
 					result.device.address,
-					mapOf("sessionId" to advertisement.sessionId),
+					advertisement.metadata + ("sessionId" to advertisement.sessionId),
 				)
 				trySend(
 					DiscoveredNode(

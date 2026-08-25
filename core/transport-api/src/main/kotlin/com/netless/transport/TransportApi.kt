@@ -67,9 +67,11 @@ class DiscoveryAdvertisement(
 	val sessionId: String,
 	capabilities: Set<DiscoveryCapability>,
 	transportHints: Set<TransportType> = emptySet(),
+	metadata: Map<String, String> = emptyMap(),
 ) : Serializable {
 	val capabilities: Set<DiscoveryCapability> = Collections.unmodifiableSet(capabilities.toMutableSet())
 	val transportHints: Set<TransportType> = Collections.unmodifiableSet(transportHints.toMutableSet())
+	val metadata: Map<String, String> = Collections.unmodifiableMap(metadata.toMutableMap())
 
 	init {
 		require(discoveryHash.isNotBlank()) { "discoveryHash must not be blank" }
@@ -84,6 +86,7 @@ class DiscoveryAdvertisement(
 			sessionId == other.sessionId &&
 			capabilities == other.capabilities &&
 			transportHints == other.transportHints
+			&& metadata == other.metadata
 
 	override fun hashCode(): Int {
 		var result = discoveryHash.hashCode()
@@ -91,6 +94,7 @@ class DiscoveryAdvertisement(
 		result = 31 * result + sessionId.hashCode()
 		result = 31 * result + capabilities.hashCode()
 		result = 31 * result + transportHints.hashCode()
+		result = 31 * result + metadata.hashCode()
 		return result
 	}
 }
