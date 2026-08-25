@@ -15,8 +15,9 @@ import com.netless.transport.TransportConnection
 import com.netless.transport.TransportPolicy
 import com.netless.transport.TransportType
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.collect
 import java.util.UUID
 import java.security.MessageDigest
@@ -26,7 +27,7 @@ import com.netless.crypto.Signature
 class MeshRuntime(
 	private val localNode: NodeId,
 	private val transports: TransportRegistry,
-	private val route: (NodeId, TransportPolicy) -> Route?,
+	private val route: suspend (NodeId, TransportPolicy) -> Route?,
 	private val relayStore: RelayStore? = null,
 	private val codec: VersionedPacketCodecContract = VersionedPacketCodec,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
@@ -34,15 +35,15 @@ class MeshRuntime(
 	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { packet, _ -> packet.content.senderSignature.isNotEmpty() },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 ) {
-	private val deliveries = MutableSharedFlow<DeliveryReceipt>(extraBufferCapacity = 16)
+	private val deliveries = mutableMapOf<PacketId, MutableStateFlow<DeliveryReceipt?>>()
+	private val deliveryLock = Any()
 
 	suspend fun send(content: ContentEnvelope, destination: NodeId, policy: TransportPolicy): DeliveryReceipt {
 		val now = nowMillis()
 		val packetId = PacketId(UUID.randomUUID().toString())
 		val selected = route(destination, policy)
 		if (selected == null) {
-			emit(packetId, DeliveryState.Failed)
-			return receipt(packetId, DeliveryState.Failed)
+			return receipt(packetId, DeliveryState.Failed).also(::emit)
 		}
 		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, localNode, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(canonical(unsigned))
@@ -57,25 +58,26 @@ class MeshRuntime(
 		return forward(bytes, packetId, selected.hops.firstOrNull())
 	}
 
-	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
+		suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
 		val now = nowMillis()
 		val packet = codec.decode(bytes, now)
 		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
 		require(validIntegrity(packet, bytes)) { "packet integrity check failed" }
 		require(verifySenderSignature(packet, canonical(packet))) { "packet signature check failed" }
-		if (relayStore?.get(packet.forwarding.packetId)?.packet?.contentEquals(bytes) == true)
+		if (relayStore?.contains(packet.forwarding.packetId) == true)
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
+		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
 		if (packet.forwarding.finalNodeId == localNode) {
 			onContent(packet.content)
 			relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
 			relayStore?.markDelivered(packet.forwarding.packetId)
 			val result = receipt(packet.forwarding.packetId, DeliveryState.Delivered)
-			deliveries.tryEmit(result)
+			emit(result)
 			return result
 		}
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
-			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(deliveries::tryEmit)
-		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(deliveries::tryEmit)
+			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
+		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = hop.nextNodeId, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
 		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(rewritten, now))
 		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
@@ -83,26 +85,29 @@ class MeshRuntime(
 		return forward(forwardedBytes, packet.forwarding.packetId, hop)
 	}
 
-	fun observeDelivery(packetId: PacketId): Flow<DeliveryReceipt> = deliveries.asSharedFlow()
-		.let { flow -> kotlinx.coroutines.flow.flow { flow.collect { if (it.packetId == packetId) emit(it) } } }
+	fun observeDelivery(packetId: PacketId): Flow<DeliveryReceipt> = synchronized(deliveryLock) {
+		deliveries.getOrPut(packetId) { MutableStateFlow(null) }
+	}.asStateFlow().filter { it != null }.let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(it!!) } } }
 
 	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?): DeliveryReceipt {
-		if (hop == null) return receipt(packetId, DeliveryState.Delivered).also(deliveries::tryEmit)
+		if (hop == null) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val adapter = transports.available(hop.transport)
-			?: return receipt(packetId, DeliveryState.Failed).also(deliveries::tryEmit)
+			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
 				connection.send(bytes)
 				connection.close()
 			} catch (error: Exception) {
-				return receipt(packetId, DeliveryState.Failed).also(deliveries::tryEmit)
+				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}
 		val result = receipt(packetId, DeliveryState.Relaying)
-		deliveries.tryEmit(result)
+		emit(result)
 		return result
 	}
 
-	private fun emit(packetId: PacketId, state: DeliveryState) { deliveries.tryEmit(receipt(packetId, state)) }
+	private fun emit(receipt: DeliveryReceipt) = synchronized(deliveryLock) {
+		deliveries.getOrPut(receipt.packetId) { MutableStateFlow(null) }.value = receipt
+	}
 
 	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray): Boolean {
 		val supplied = packet.forwarding.perHopIntegrity

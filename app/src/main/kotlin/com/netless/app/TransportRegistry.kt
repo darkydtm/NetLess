@@ -12,7 +12,7 @@ class TransportRegistry {
 		adapters[adapter.type] = adapter
 	}
 
-	fun availableAdapters(): List<TransportAdapter> = adapters.values.filter {
+	suspend fun availableAdapters(): List<TransportAdapter> = adapters.values.filter {
 		it.availability.first() !in setOf(TransportState.Unavailable, TransportState.Failed, TransportState.Closed)
 	}
 

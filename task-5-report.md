@@ -46,4 +46,13 @@ Verification: `git diff --check` passed. Gradle tests were not runnable because 
 - Tracked accepted session jobs and cancelled them during `PeerMessageRuntime.stopServer`.
 - Preserved failed and no-route packets in relay storage and emitted failure observations.
 
+## Final fixer status
+
+- Made adapter availability lookup suspend-safe and filtered unavailable adapters before route selection.
+- Changed delivery observations to a per-packet replayable `StateFlow` map; no-hop sends now fail instead of claiming delivery.
+- Authenticate and validate received packets before atomic relay-store deduplication/persistence and route selection.
+- Persist opaque encrypted payloads from the typed final-content callback in the pending content store without plaintext conversion.
+
+Verification: `git diff --check` passed. Kotlin/Gradle verification was unavailable because this checkout has no Gradle wrapper or system Gradle. Typed hop-ack wire framing, ack-driven relay deletion, and the requested three-node integration test remain unimplemented and are not claimed here.
+
 Verification: `git diff --check` passed. No Gradle executable or wrapper is present, so Kotlin tests and the requested multi-instance two-hop transport tests could not run. Existing untracked workspace paths were not included.

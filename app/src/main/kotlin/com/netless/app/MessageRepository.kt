@@ -23,7 +23,10 @@ class MessageRepository(private val store: DurableEncryptedContentStore) {
 		store.get(id)?.let(::decode)
 	}
 
-	suspend fun onContent(content: ContentEnvelope) = Unit
+	@Synchronized
+	suspend fun onContent(content: ContentEnvelope) {
+		store.put("pending:${content.eventId}", content.encryptedPayload)
+	}
 
 	private fun encode(message: Message): ByteArray = listOf(message.id, message.conversationId, message.body).joinToString("\u0000").toByteArray(StandardCharsets.UTF_8)
 

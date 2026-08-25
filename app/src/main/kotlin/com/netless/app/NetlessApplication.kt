@@ -43,8 +43,9 @@ class AppContainer(application: Application) {
 	val meshRuntime = MeshRuntime(
 		com.netless.common.NodeId(localIdentity.profileId.value), transportRegistry,
 		{ destination, policy ->
+			val available = transportRegistry.availableAdapters()
 			val hops = contacts.contacts.value.flatMap { node ->
-				transportRegistry.availableAdapters().filter { adapter -> adapter.type.name == node.endpoint.metadata["transport"] || node.endpoint.metadata["transport"] == null }.map {
+				available.filter { adapter -> adapter.type.name == node.endpoint.metadata["transport"] || node.endpoint.metadata["transport"] == null }.map {
 					RouteHop(com.netless.common.NodeId(localIdentity.profileId.value), node.nodeId, it.type, node.endpoint, RouteMetrics(1.0, 1.0, 1.0, 1.0), Long.MAX_VALUE)
 				}
 			}
