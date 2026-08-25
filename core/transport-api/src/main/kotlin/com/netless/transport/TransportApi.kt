@@ -3,14 +3,6 @@ package com.netless.transport
 import com.netless.common.NodeId
 import kotlinx.coroutines.flow.Flow
 import java.io.Serializable
-import java.util.Collections
-
-enum class TransportType {
-	Bluetooth,
-	WifiDirect,
-	WifiAware,
-	LocalHotspot,
-}
 
 enum class TransportState {
 	Unavailable,
@@ -32,26 +24,6 @@ data class TransportCapabilities(
 	init {
 		require(maxConcurrentConnections >= 0) { "maxConcurrentConnections must not be negative" }
 	}
-}
-
-class TransportEndpoint(
-	val nodeId: NodeId,
-	val address: String,
-	metadata: Map<String, String> = emptyMap(),
-) : Serializable {
-	val metadata: Map<String, String> = Collections.unmodifiableMap(metadata.toMutableMap())
-
-	init {
-		require(address.isNotBlank()) { "address must not be blank" }
-	}
-
-	override fun equals(other: Any?): Boolean =
-		other is TransportEndpoint &&
-			nodeId == other.nodeId &&
-			address == other.address &&
-			metadata == other.metadata
-
-	override fun hashCode(): Int = 31 * (31 * nodeId.hashCode() + address.hashCode()) + metadata.hashCode()
 }
 
 data class TransportHop(
