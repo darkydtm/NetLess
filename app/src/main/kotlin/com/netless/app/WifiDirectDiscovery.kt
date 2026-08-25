@@ -46,10 +46,10 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 		context.registerReceiver(registered, IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION))
 		wifiManager.discoverPeers(wifiChannel, object : WifiP2pManager.ActionListener {
 			override fun onSuccess() = Unit
-			override fun onFailure(reason: Int) { close(IllegalStateException("Wi-Fi Direct discovery failed: $reason")) }
+			override fun onFailure(reason: Int) { close() }
 		})
 		awaitClose {
-			context.unregisterReceiver(registered)
+			runCatching { context.unregisterReceiver(registered) }
 			if (receiver === registered) receiver = null
 		}
 	}
@@ -58,7 +58,7 @@ class WifiDirectDiscoveryTransport(private val context: Context) : DiscoveryTran
 		val wifiManager = manager ?: return
 		val channel = wifiChannel ?: return
 		wifiManager.stopPeerDiscovery(channel, null)
-		receiver?.let { context.unregisterReceiver(it) }
+		receiver?.let { runCatching { context.unregisterReceiver(it) } }
 		receiver = null
 	}
 
