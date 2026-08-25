@@ -63,7 +63,7 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 
 @Composable fun ContactsScreen(contacts: List<com.netless.transport.DiscoveredNode>, viewModel: MessengerViewModel) {
 	var value by remember { mutableStateOf("") }
-	Column { Text("Contacts", style = MaterialTheme.typography.headlineMedium); OutlinedTextField(value, { value = it }, label = { Text("Profile ID | display name") }); Button({ viewModel.addContactText(value); value = "" }, enabled = value.contains('|')) { Text("Add contact") }; if (contacts.isEmpty()) Text("No nearby contacts yet"); contacts.forEach { Text(it.endpoint.address, Modifier.padding(vertical = 8.dp)) } }
+	Column { Text("Contacts", style = MaterialTheme.typography.headlineMedium); OutlinedTextField(value, { value = it }, label = { Text("profileId | displayName | nodeId | endpoint | identityKey") }); Button({ viewModel.addContactText(value); value = "" }, enabled = value.contains('|')) { Text("Add contact") }; viewModel.uiState.collectAsState().value.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; if (contacts.isEmpty()) Text("No nearby contacts yet"); contacts.forEach { Text(it.endpoint.address, Modifier.padding(vertical = 8.dp)) } }
 }
 
 @Composable fun SettingsScreen(profile: ProfileViewModel, state: MessengerUiState, viewModel: MessengerViewModel) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Settings", style = MaterialTheme.typography.headlineMedium); Text("Network", style = MaterialTheme.typography.titleMedium); NetworkSettingsScreen(state, viewModel); Text("Profile", style = MaterialTheme.typography.titleMedium); ProfileFields(profile) } }

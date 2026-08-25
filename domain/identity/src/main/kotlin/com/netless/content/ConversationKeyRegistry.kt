@@ -12,7 +12,7 @@ class ConversationKeyRegistry(
 ) {
 	private val keys = HashMap<String, SecretKey>()
 	private val sessions = HashSet<String>()
-	init { store?.ids()?.filter { it.startsWith("conversation-key:") }?.forEach { id -> store.get(id)?.let { keys[id.removePrefix("conversation-key:")] = javax.crypto.spec.SecretKeySpec(it, "AES") } } }
+	init { store?.ids()?.filter { it.startsWith("conversation-key:") }?.forEach { id -> store.get(id)?.let { sessionId -> keys[id.removePrefix("conversation-key:")] = javax.crypto.spec.SecretKeySpec(sessionId, "AES"); sessions.add(id.removePrefix("conversation-key:")) } } }
 
 	fun register(sessionId: String, key: SecretKey) {
 		require(sessionId.isNotBlank()) { "sessionId must not be blank" }
@@ -30,7 +30,10 @@ class ConversationKeyRegistry(
 		require(exchange.verifyOffer(offer)) { "key exchange identity signature failed" }
 		require(sessions.add(offer.sessionId)) { "key exchange session already used" }
 		val transcript = EphemeralKeyExchange.transcript(local.publicKey, remotePublicKey, offer.sessionId)
-		return local.derive(remotePublicKey, transcript).also { keys[offer.sessionId] = it }
+		return local.derive(remotePublicKey, transcript).also { key ->
+			keys[offer.sessionId] = key
+			store?.put("conversation-key:${offer.sessionId}", key.encoded)
+		}
 	}
 
 	fun key(sessionId: String): SecretKey = keys[sessionId]

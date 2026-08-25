@@ -67,11 +67,12 @@ class AppContainer(application: Application) {
 		signPacket = { data -> identityRepository.sign(data).bytes },
 		verifySenderSignature = { packet, data ->
 			val content = packet.content
-			val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
+			val key = contacts.contacts.value.firstOrNull { it.endpoint.metadata["profileId"] == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
 			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), data, com.netless.crypto.Signature(content.senderSignature))
 		},
 		onContent = { content -> conversations.onIncomingContent(content) },
 		localIdentity = localIdentity.publicKey,
+		localProfileId = localIdentity.profileId,
 		signSession = { data -> identityRepository.sign(data) },
 		verifySession = { key, data, signature -> identityRepository.verify(key, data, signature) },
 	)
@@ -79,12 +80,12 @@ class AppContainer(application: Application) {
 				override suspend fun send(message: ChatMessage, payload: com.netless.content.ConversationMessagePayload, policy: SendPolicy): DeliveryState {
 				val conversationId = message.conversationId
 				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
-				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
-				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), ByteArray(32))
+				val destination = com.netless.common.NodeId(contact.nodeId)
+				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), byteArrayOf())
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
-	}, contentCipher = contentCipher)
+	}, contentCipher = contentCipher, contactStore = contacts)
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },

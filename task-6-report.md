@@ -54,3 +54,14 @@ Implemented persistent conversation message and contact projections over `Durabl
 - Added blank sender validation, authorized incoming sender/conversation checks, and first-contact conversation selection.
 
 Verification: `git diff --check` passed. Tests could not run because this checkout has no Gradle wrapper or system Gradle executable. Full requested integration coverage remains unverified.
+
+## Pre-CI Review Follow-up
+
+- Durable conversation keys now persist on `establish` and restore consumed session metadata.
+- Manual contact input now requires and persists profile ID, display name, node ID, endpoint, and identity key in both repositories, then opens the conversation; invalid input is user-visible.
+- Contact persistence retains endpoint address, node ID, profile ID, and identity key metadata instead of reconstructing an endpoint from discovery hash.
+- Incoming packets can require the local profile recipient, while sender identity lookup uses the authorized contact profile mapping.
+- Conversation payload ciphertext and authentication-tag lengths reject negative or oversized values before allocation.
+- Envelope canonicalization uses explicit empty pre-sign state rather than a 32-byte placeholder.
+
+Verification: `git diff --check` passed. Tests could not run because this checkout has no Gradle wrapper or system Gradle executable; the manual-contact validation and persistence tests are included for CI.

@@ -18,7 +18,7 @@ class ConversationRepositoryTest {
 		val file = File.createTempFile("conversation", ".db").also { it.delete() }
 		val store = DurableEncryptedContentStore(file, PlainCipher)
 		val first = repository(store)
-		first.addContact("profile", "Alex")
+		first.addContact("profile", "Alex", "node", "endpoint", "identity-key")
 		first.send("conversation", "hello", SendPolicy.Automatic).first()
 
 		val restored = repository(DurableEncryptedContentStore(file, PlainCipher))
@@ -29,9 +29,14 @@ class ConversationRepositoryTest {
 	@Test
 	fun `contact identity does not depend on endpoint`() = runTest {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
-		repository.addContact("profile", "Alex")
-		repository.updateEndpoint("profile", "endpoint")
-		assertEquals("profile", repository.contacts().single().profileId)
+		repository.addContact("profile", "Alex", "node", "endpoint", "identity-key")
+		assertEquals(Contact("profile", "Alex", "node", "endpoint", "identity-key"), repository.contacts().single())
+	}
+
+	@Test
+	fun `contact requires complete identity route`() {
+		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
+		kotlin.test.assertFailsWith<IllegalArgumentException> { repository.addContact("profile", "Alex", "", "endpoint", "identity-key") }
 	}
 
 	@Test

@@ -16,7 +16,7 @@ import java.io.DataOutputStream
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 
-data class Contact(val profileId: String, val displayName: String, val endpoint: String? = null, val identityKey: String? = null)
+data class Contact(val profileId: String, val displayName: String, val nodeId: String, val endpoint: String, val identityKey: String)
 data class ChatMessage(val id: String, val conversationId: String, val body: String, val timestamp: Long, val deliveryState: DeliveryState, val read: Boolean = true)
 data class ConversationSummary(val conversationId: String, val contactProfileId: String, val lastMessagePreview: String, val timestamp: Long, val unreadCount: Int, val deliveryState: DeliveryState)
 sealed interface SendPolicy {
@@ -27,7 +27,7 @@ interface MessageSender {
 	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState
 }
 
-class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher) {
+class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val contactStore: ContactStore? = null) {
 	private val messages = LinkedHashMap<String, ChatMessage>()
 	private val contacts = LinkedHashMap<String, Contact>()
 	private val state = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -44,8 +44,14 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun messages(conversationId: String) = state.value.filter { it.conversationId == conversationId }
 	fun observeDelivery(messageId: String): Flow<DeliveryState> = deliveryState.getOrPut(messageId) { MutableStateFlow(messages.firstOrNull { it.id == messageId }?.deliveryState ?: DeliveryState.Failed) }.asStateFlow()
 	fun contacts() = contacts.values.toList()
-	fun addContact(profileId: String, displayName: String) = synchronized(lock) { require(profileId.isNotBlank() && displayName.isNotBlank()); val contact = Contact(profileId, displayName); contacts[profileId] = contact; store.put("contact:$profileId", encode(contact)); publish() }
-	fun updateEndpoint(profileId: String, endpoint: String) = synchronized(lock) { require(endpoint.isNotBlank()); val contact = contacts[profileId] ?: error("unknown contact"); contacts[profileId] = contact.copy(endpoint = endpoint); store.put("contact:$profileId", encode(contacts.getValue(profileId))); publish() }
+	fun addContact(profileId: String, displayName: String, nodeId: String, endpoint: String, identityKey: String) = synchronized(lock) {
+		require(listOf(profileId, displayName, nodeId, endpoint, identityKey).all { it.isNotBlank() }) { "profileId, displayName, nodeId, endpoint, and identityKey are required" }
+		val contact = Contact(profileId, displayName, nodeId, endpoint, identityKey)
+		contacts[profileId] = contact
+		store.put("contact:$profileId", encode(contact))
+		contactStore?.upsert(com.netless.common.ProfileId(profileId), com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, mapOf("profileId" to profileId, "identityKey" to identityKey)))
+		publish()
+	}
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
 	suspend fun onIncomingContent(content: ContentEnvelope) {
 		val payload = runCatching { ConversationMessagePayload.decode(content.encryptedPayload) }.getOrNull() ?: return
@@ -67,6 +73,6 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	private fun publish() { state.value = messages.values.toList(); conversationState.value = messages.values.groupBy { it.conversationId }.map { (id, values) -> values.maxBy { it.timestamp }.let { ConversationSummary(id, contacts[id]?.profileId ?: id, it.body, it.timestamp, values.count { !it.read }, it.deliveryState) } } }
 	private fun encode(m: ChatMessage) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(m.id); writeUTF(m.conversationId); writeUTF(m.body); writeLong(m.timestamp); writeUTF(m.deliveryState.name); writeBoolean(m.read) } }.toByteArray()
 	private fun decode(b: ByteArray): ChatMessage = DataInputStream(ByteArrayInputStream(b)).use { input -> ChatMessage(input.readUTF(), input.readUTF(), input.readUTF(), input.readLong(), input.readUTF().let(DeliveryState::valueOf), input.readBoolean()).also { require(input.available() == 0) } }
-	private fun encode(c: Contact) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(c.profileId); writeUTF(c.displayName); writeBoolean(c.endpoint != null); if (c.endpoint != null) writeUTF(c.endpoint); writeBoolean(c.identityKey != null); if (c.identityKey != null) writeUTF(c.identityKey) } }.toByteArray()
-	private fun decodeContact(b: ByteArray): Contact { val input = DataInputStream(ByteArrayInputStream(b)); return Contact(input.readUTF(), input.readUTF(), if (input.readBoolean()) input.readUTF() else null, if (input.readBoolean()) input.readUTF() else null) }
+	private fun encode(c: Contact) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(c.profileId); writeUTF(c.displayName); writeUTF(c.nodeId); writeUTF(c.endpoint); writeUTF(c.identityKey) } }.toByteArray()
+	private fun decodeContact(b: ByteArray): Contact { val input = DataInputStream(ByteArrayInputStream(b)); return Contact(input.readUTF(), input.readUTF(), input.readUTF(), input.readUTF(), input.readUTF()).also { require(input.available() == 0) } }
 }

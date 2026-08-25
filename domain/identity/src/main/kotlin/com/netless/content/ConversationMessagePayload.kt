@@ -29,6 +29,7 @@ data class ConversationMessagePayload(
 
 	companion object {
 		private const val VERSION = 1
+		private const val MAX_FIELD_BYTES = 1 shl 20
 
 		fun decode(bytes: ByteArray): ConversationMessagePayload = DataInputStream(ByteArrayInputStream(bytes)).use { input ->
 			require(input.readInt() == VERSION) { "unsupported conversation payload version" }
@@ -36,10 +37,16 @@ data class ConversationMessagePayload(
 			val messageId = input.readUTF()
 			val conversationId = input.readUTF()
 			val keyId = input.readUTF()
-			val ciphertext = ByteArray(input.readInt()).also(input::readFully)
-			val tag = ByteArray(input.readInt()).also(input::readFully)
+			val ciphertext = readBounded(input, "ciphertext")
+			val tag = readBounded(input, "authentication tag")
 			require(input.available() == 0)
 			ConversationMessagePayload(sessionId, messageId, conversationId, EncryptedContent(keyId, ciphertext, tag))
+		}
+
+		private fun readBounded(input: DataInputStream, name: String): ByteArray {
+			val size = input.readInt()
+			require(size >= 0 && size <= MAX_FIELD_BYTES) { "$name size is out of bounds" }
+			return ByteArray(size).also(input::readFully)
 		}
 	}
 }

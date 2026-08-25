@@ -99,7 +99,6 @@ class ContentEnvelope(
 		require(this.recipients.isNotEmpty()) { "recipients must not be empty" }
 		require(this.recipients.distinct().size == this.recipients.size) { "recipients must be unique" }
 		require(encryptedPayloadValue.isNotEmpty()) { "encryptedPayload must not be empty" }
-		require(senderSignatureValue.isNotEmpty()) { "senderSignature must not be empty" }
 	}
 
 	fun copy(

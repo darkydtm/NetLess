@@ -66,13 +66,23 @@ class ContactStore(private val store: com.netless.content.DurableEncryptedConten
 	private val contactsByNode = LinkedHashMap<NodeId, DiscoveredNode>()
 	private val _contacts = MutableStateFlow<List<DiscoveredNode>>(emptyList())
 	val contacts: StateFlow<List<DiscoveredNode>> = _contacts.asStateFlow()
-	init { store?.ids()?.filter { it.startsWith("discovered-contact:") }?.forEach { id -> store.get(id)?.let { runCatching { BleAdvertisementCodec.decode(it) }.getOrNull() }?.let { advertisement -> val endpoint = TransportEndpoint(NodeId(advertisement.discoveryHash), advertisement.discoveryHash, advertisement.metadata); upsert(DiscoveredNode(endpoint.nodeId, endpoint, TransportCapabilities(true, true, 1, true, true))) } } }
+	init { store?.ids()?.filter { it.startsWith("discovered-contact:") }?.forEach { id -> store.get(id)?.let { runCatching { BleAdvertisementCodec.decode(it) }.getOrNull() }?.let { advertisement -> val nodeId = NodeId(advertisement.metadata["nodeId"] ?: return@let); val address = advertisement.metadata["endpointAddress"] ?: return@let; val endpoint = TransportEndpoint(nodeId, address, advertisement.metadata); upsert(DiscoveredNode(nodeId, endpoint, TransportCapabilities(true, true, 1, true, true))) } } }
 
 	@Synchronized
 	fun upsert(node: DiscoveredNode) {
 		contactsByNode[node.nodeId] = node
-		store?.put("discovered-contact:${node.nodeId.value}", BleAdvertisementCodec.encode(DiscoveryAdvertisement(node.nodeId.value, 1, node.endpoint.metadata["sessionId"] ?: node.nodeId.value, emptySet(), emptySet(), node.endpoint.metadata)))
+		val metadata = node.endpoint.metadata + ("nodeId" to node.nodeId.value) + ("endpointAddress" to node.endpoint.address)
+		store?.put("discovered-contact:${node.nodeId.value}", BleAdvertisementCodec.encode(DiscoveryAdvertisement(node.nodeId.value, 1, metadata["sessionId"] ?: node.nodeId.value, emptySet(), emptySet(), metadata)))
 		_contacts.value = contactsByNode.values.toList()
+	}
+
+	fun upsert(profileId: com.netless.common.ProfileId, nodeId: NodeId, endpoint: TransportEndpoint, identityKey: String? = null) {
+		require(endpoint.nodeId == nodeId)
+		val metadata = endpoint.metadata.toMutableMap().apply {
+			put("profileId", profileId.value)
+			identityKey?.takeIf { it.isNotBlank() }?.let { put("identityKey", it) }
+		}
+		upsert(DiscoveredNode(nodeId, TransportEndpoint(nodeId, endpoint.address, metadata), TransportCapabilities(true, true, 1, true, true)))
 	}
 
 	@Synchronized

@@ -28,6 +28,7 @@ data class MessengerUiState(
 	val routeDetails: List<String>? = null,
 	val messages: List<ChatMessage> = emptyList(),
 	val deliveryByMessageId: Map<String, String> = emptyMap(),
+	val error: String? = null,
 )
 
 class MessengerViewModel(
@@ -50,16 +51,17 @@ class MessengerViewModel(
 
 	fun draftChanged(text: String) = _uiState.update { it.copy(draft = text) }
 
-	fun addContact(profileId: String, displayName: String) {
+	fun addContact(profileId: String, displayName: String, nodeId: String, endpoint: String, identityKey: String) {
 		val id = profileId.trim()
 		val name = displayName.trim()
-		repository?.addContact(id, name)
+		try { repository?.addContact(id, name, nodeId.trim(), endpoint.trim(), identityKey.trim()) } catch (error: IllegalArgumentException) { _uiState.update { it.copy(error = error.message ?: "Invalid contact") }; return }
 		_uiState.update { state -> state.copy(currentTab = MessengerTab.Chats, selectedConversation = id, conversations = (state.conversations + ConversationUiState(id, name)).distinctBy { it.id }) }
 	}
 
 	fun addContactText(value: String) {
-		val parts = value.trim().split('|', limit = 2)
-		if (parts.size == 2) addContact(parts[0], parts[1])
+		val parts = value.split('|').map(String::trim)
+		if (parts.size == 5) addContact(parts[0], parts[1], parts[2], parts[3], parts[4])
+		else _uiState.update { it.copy(error = "Use profileId | displayName | nodeId | endpoint | identityKey") }
 	}
 
 	fun send(text: String = uiState.value.draft) {

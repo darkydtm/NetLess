@@ -42,6 +42,7 @@ class MeshRuntime(
 	private val verifySenderSignature: suspend (PacketEnvelope, ByteArray) -> Boolean = { _, _ -> false },
 	private val onContent: suspend (ContentEnvelope) -> Unit = {},
 	private val localIdentity: PublicKey? = null,
+	private val localProfileId: com.netless.common.ProfileId? = null,
 	private val signSession: (suspend (ByteArray) -> Signature)? = null,
 	private val verifySession: (suspend (PublicKey, ByteArray, Signature) -> Boolean)? = null,
 ) {
@@ -59,7 +60,7 @@ class MeshRuntime(
 		val firstHop = selected.hops.firstOrNull()?.nextNodeId
 		val currentNode = firstHop ?: localNode
 		val nextHop = selected.hops.getOrNull(1)?.nextNodeId ?: destination.takeUnless { it == currentNode }
-		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, ByteArray(32), currentNode), content.copy(senderSignature = ByteArray(32)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
+		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0), currentNode), content.copy(senderSignature = byteArrayOf()), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(originCanonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
@@ -73,6 +74,7 @@ class MeshRuntime(
 		val now = nowMillis()
 		val packet = try {
 			codec.decode(bytes, now).also {
+				require(localProfileId == null || localProfileId in it.content.recipients) { "content is not addressed to local profile" }
 				require(it.forwarding.currentNodeId == localNode) { "packet is not addressed to this node" }
 				require(validIntegrity(it, bytes, now)) { "packet integrity check failed" }
 				require(verifySenderSignature(it, originCanonical(it, now))) { "packet signature check failed" }
@@ -109,7 +111,7 @@ class MeshRuntime(
 			?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val hop = selected.hops.firstOrNull() ?: return receipt(packet.forwarding.packetId, DeliveryState.Failed).also(::emit)
 		val followingHop = selected.hops.getOrNull(1)?.nextNodeId ?: packet.forwarding.finalNodeId.takeUnless { it == hop.nextNodeId }
-		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = followingHop, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = ByteArray(32)))
+		val rewritten = packet.copy(forwarding = packet.forwarding.copy(currentNodeId = hop.nextNodeId, nextHop = followingHop, hopCount = packet.forwarding.hopCount + 1, perHopIntegrity = byteArrayOf(0)))
 		val integrity = MessageDigest.getInstance("SHA-256").digest(canonical(rewritten, now))
 		val forwardedBytes = codec.encode(rewritten.copy(forwarding = rewritten.forwarding.copy(perHopIntegrity = integrity)), now)
 		relayStore?.put(forwardedBytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, hop.nextNodeId)
@@ -211,13 +213,13 @@ class MeshRuntime(
 	}
 
 	private fun canonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
-		forwarding = packet.forwarding.copy(perHopIntegrity = ByteArray(32)),
-		content = packet.content.copy(senderSignature = ByteArray(32)),
+		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+		content = packet.content.copy(senderSignature = byteArrayOf()),
 	), now)
 
 	private fun originCanonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
-		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = ByteArray(32)),
-		content = packet.content.copy(senderSignature = ByteArray(32)),
+		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(0)),
+		content = packet.content.copy(senderSignature = byteArrayOf()),
 	), now)
 
 	private fun receipt(packetId: PacketId, state: DeliveryState) = DeliveryReceipt(packetId, state, localNode, nowMillis())
