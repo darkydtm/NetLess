@@ -48,6 +48,22 @@ class MeshRuntimeTest {
 		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
 		assertTrue(!network.originStore.contains(result.packetId))
 		assertTrue(!network.relayStore.contains(result.packetId))
+		assertEquals(NodeId("relay"), network.forwarding.first().first)
+		assertEquals(NodeId("destination"), network.forwarding.first().second)
+		assertEquals(NodeId("destination"), network.forwarding.last().first)
+		assertEquals(null, network.forwarding.last().second)
+	}
+
+	@Test
+	fun `duplicate packet replays terminal receipt without handing off content twice`() = runTest {
+		val network = ThreeNodeNetwork()
+		val result = network.origin.send(content(), network.destinationId, TransportPolicy.Automatic())
+		val packet = network.destinationPacket!!
+
+		assertEquals(network.destinationReceipt, network.destination.receive(packet, TransportType.WifiDirect))
+		assertEquals(1, network.contentDeliveries)
+		assertEquals(result.packetId, network.destinationReceipt?.packetId)
+		assertEquals(network.destinationId, network.destinationReceipt?.nodeId)
 	}
 
 	@Test
@@ -145,6 +161,9 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	val originStore = RelayStore()
 	val relayStore = RelayStore()
 	var received: ContentEnvelope? = null
+	var contentDeliveries = 0
+	var destinationPacket: ByteArray? = null
+	val forwarding = mutableListOf<Pair<NodeId, NodeId?>>()
 	val relayId = NodeId("relay")
 	var destinationReceipt: DeliveryReceipt? = null
 	var relayReceipt: DeliveryReceipt? = null
@@ -167,7 +186,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 		)
 		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
 		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
-		destination = runtime(destinationId, null, emptyList()) { if (failDestination) error("destination rejected content") else received = it }
+		destination = runtime(destinationId, null, emptyList()) { if (failDestination) error("destination rejected content") else { received = it; contentDeliveries++ } }
 	}
 
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)
@@ -184,8 +203,12 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 				override val peerIdentity = network.keys.getValue(peer.value)
 				private var incoming = kotlinx.coroutines.flow.emptyFlow<ByteArray>()
 				override val incomingPackets get() = incoming
-				override suspend fun send(packet: ByteArray) {
-					val response = nodes.getValue(peer)().receiveFrame(packet, type)
+					override suspend fun send(packet: ByteArray) {
+						val forwarded = (ControlCodec.decode(packet) as Forward).packet
+						val envelope = com.netless.protocol.VersionedPacketCodec.decode(forwarded)
+						network.forwarding += envelope.forwarding.currentNodeId to envelope.forwarding.nextHop
+						if (peer.value == "destination") network.destinationPacket = forwarded
+						val response = nodes.getValue(peer)().receiveFrame(packet, type)
 					when (val decoded = ControlCodec.decode(response)) {
 						is Receipt -> when (peer.value) { "destination" -> network.destinationReceipt = decoded.value; "relay" -> { network.relayReceipt = decoded.value; network.originReceipt = decoded.value } }
 						is Acknowledgement -> if (!decoded.value.accepted) network.relayFailureReceipt = DeliveryReceipt(decoded.value.packetId, DeliveryState.Failed, peer, 1_000L)

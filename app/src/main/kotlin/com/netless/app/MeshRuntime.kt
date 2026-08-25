@@ -43,6 +43,7 @@ class MeshRuntime(
 	private val verifySession: (suspend (PublicKey, ByteArray, Signature) -> Boolean)? = null,
 ) {
 	private val deliveries = mutableMapOf<PacketId, MutableStateFlow<DeliveryReceipt?>>()
+	private val terminalReceipts = mutableMapOf<PacketId, DeliveryReceipt>()
 	private val deliveryLock = Any()
 
 	suspend fun send(content: ContentEnvelope, destination: NodeId, policy: TransportPolicy): DeliveryReceipt {
@@ -82,16 +83,18 @@ class MeshRuntime(
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
 		}
 		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
+		terminalReceipts[packet.forwarding.packetId]?.let { return it.also(::emit) }
 		if (packet.forwarding.finalNodeId == localNode) {
 			val result = try {
 				onContent(packet.content)
 				relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
 				relayStore?.markDelivered(packet.forwarding.packetId)
-				receipt(packet.forwarding.packetId, DeliveryState.Delivered)
+				DeliveryReceipt(packet.forwarding.packetId, DeliveryState.Delivered, packet.forwarding.finalNodeId, now)
 			} catch (error: Exception) {
 				receipt(packet.forwarding.packetId, DeliveryState.Failed)
 			}
 			emit(result)
+			if (result.state == DeliveryState.Delivered) terminalReceipts[result.packetId] = result
 			return result
 		}
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
@@ -122,7 +125,8 @@ class MeshRuntime(
 				require(packet.forwarding.packetId == decoded.value.packetId) { "receipt packet id does not match packet" }
 				require(decoded.value.nodeId == packet.forwarding.finalNodeId) { "receipt destination does not match packet" }
 				val result = decoded.value
-				relayStore?.markDelivered(decoded.value.packetId)
+				terminalReceipts[result.packetId] = result
+				relayStore?.markDelivered(result.packetId)
 				emit(result)
 				ControlCodec.receipt(result)
 			}
@@ -140,7 +144,7 @@ class MeshRuntime(
 		require(!hop.endpoint.metadata["identityKey"].isNullOrBlank()) { "missing endpoint identity key" }
 		val adapter = transports.available(hop.transport)
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
-		var finalDelivery = false
+		var propagatedReceipt: DeliveryReceipt? = null
 		try {
 				val expectedKey = com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(hop.endpoint.metadata.getValue("identityKey")))
 				require(localIdentity != null && signSession != null && verifySession != null) { "authenticated transport configuration is required" }
@@ -154,19 +158,19 @@ class MeshRuntime(
 					if (response.value.state == DeliveryState.Failed) return response.value.also(::emit)
 					require(response.value.state == DeliveryState.Delivered)
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
-					finalDelivery = true
+					propagatedReceipt = response.value
 					relayStore?.markDelivered(packetId)
 				}
 				is Acknowledgement -> {
 					require(response.value.packetId == packetId && response.value.nodeId == hop.nextNodeId && response.value.accepted)
 					if (response.value.finalDelivery) {
 						require(hop.nextNodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "terminal acknowledgement from non-final hop" }
-						finalDelivery = true
+						propagatedReceipt = DeliveryReceipt(packetId, DeliveryState.Delivered, hop.nextNodeId, now)
 						relayStore?.markDelivered(packetId)
 					} else {
 						val receipt = ControlCodec.decode(connection.incomingPackets.first())
 						require(receipt is Receipt && receipt.value.packetId == packetId && receipt.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && receipt.value.state == DeliveryState.Delivered)
-						finalDelivery = true
+						propagatedReceipt = receipt.value
 						relayStore?.markDelivered(packetId)
 					}
 				}
@@ -177,7 +181,8 @@ class MeshRuntime(
 				try { adapter.fail() } catch (_: Exception) { }
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}
-		val result = if (finalDelivery) receipt(packetId, DeliveryState.Delivered) else receipt(packetId, DeliveryState.Relaying)
+		val result = propagatedReceipt ?: receipt(packetId, DeliveryState.Relaying)
+		if (result.state == DeliveryState.Delivered) terminalReceipts[packetId] = result
 		emit(result)
 		return result
 	}
