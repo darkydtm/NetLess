@@ -39,3 +39,15 @@ Static checks confirmed no `MessageFrame` or `BinaryPacketCodec` references rema
 - The local route provider is intentionally supplied by the runtime boundary; application wiring currently has no populated route graph, so production route discovery remains a later integration concern.
 - BLE remains discovery-only; no BLE data adapter or GATT transport is claimed.
 - Local compilation and unit-test execution remain unverified because the available repository tooling is incomplete.
+
+## Review Fixes
+
+- Added packet integrity validation and sender-authentication hook before relay processing.
+- Added destination validation, persistent deduplication, and persistence before forwarding.
+- Changed forwarding to one next hop per receive and retain failed relay records.
+- Corrected delivery state reporting and filtered `observeDelivery` by packet ID.
+- Kept BLE discovery-only and preserved the existing versioned codec boundary.
+
+## Verification
+
+`./gradlew :app:test --tests com.netless.app.MeshRuntimeTest` remains unavailable because this checkout has no Gradle wrapper. `git diff --check` is the available verification command.

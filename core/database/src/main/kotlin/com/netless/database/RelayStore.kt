@@ -100,6 +100,13 @@ class RelayStore(
 	}
 
 	@Synchronized
+	fun contains(packetId: PacketId): Boolean = withFileLock {
+		load()
+		prune(nowMillis())
+		deduplication.containsKey(key(packetId))
+	}
+
+	@Synchronized
 	fun markDelivered(packetId: PacketId) {
 		withFileLock {
 			load()
