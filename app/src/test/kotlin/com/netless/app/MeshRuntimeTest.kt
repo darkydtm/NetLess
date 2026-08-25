@@ -11,6 +11,8 @@ import com.netless.protocol.DeliveryState
 import com.netless.protocol.ControlCodec
 import com.netless.protocol.Forward
 import com.netless.protocol.HopAcknowledgement
+import com.netless.protocol.DeliveryReceipt
+import com.netless.protocol.Receipt
 import com.netless.transport.TransportAdapter
 import com.netless.transport.TransportConnection
 import com.netless.transport.TransportEndpoint
@@ -19,6 +21,7 @@ import com.netless.transport.TransportState
 import com.netless.transport.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,9 +38,9 @@ class MeshRuntimeTest {
 		val runtime = network.runtime()
 		val result = runtime.send(content(), NodeId("destination"), TransportPolicy.Automatic())
 
-		assertEquals(DeliveryState.Relaying, result.state)
+		assertEquals(DeliveryState.Delivered, result.state)
 		assertEquals(listOf(TransportType.Bluetooth), network.usedTransports)
-		assertTrue(network.relayStore.count() > 0)
+		assertEquals(0, network.relayStore.count())
 	}
 
 	@Test
@@ -45,8 +48,18 @@ class MeshRuntimeTest {
 		val network = FakeNetwork().also { it.disabled += TransportType.Bluetooth }
 		val runtime = network.runtime()
 
-		assertEquals(DeliveryState.Relaying, runtime.send(content(), NodeId("destination"), TransportPolicy.Preferred(listOf(TransportType.Bluetooth, TransportType.WifiDirect))).state)
+		assertEquals(DeliveryState.Delivered, runtime.send(content(), NodeId("destination"), TransportPolicy.Preferred(listOf(TransportType.Bluetooth, TransportType.WifiDirect))).state)
 		assertEquals(listOf(TransportType.WifiDirect), network.usedTransports)
+	}
+
+	@Test
+	fun `missing packet signature emits failure observation`() = runTest {
+		val network = FakeNetwork()
+		val runtime = network.runtime(verifySignature = { _, _ -> false })
+		val result = runCatching { runtime.receive(network.packet(), TransportType.Bluetooth) }
+
+		assertTrue(result.isFailure)
+		assertEquals(DeliveryState.Failed, runtime.observeDelivery(network.packetId).first().state)
 	}
 
 	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
@@ -58,7 +71,7 @@ private class FakeNetwork {
 	val relayStore = RelayStore()
 	private val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
-	fun runtime() = MeshRuntime(
+	fun runtime(verifySignature: suspend (com.netless.protocol.PacketEnvelope, ByteArray) -> Boolean = { _, _ -> true }) = MeshRuntime(
 		NodeId("local"),
 		TransportRegistry().also { registry ->
 			registry.register(FakeAdapter(TransportType.Bluetooth, this))
@@ -73,11 +86,17 @@ private class FakeNetwork {
 		},
 		relayStore = relayStore,
 		signPacket = { byteArrayOf(9) },
-		verifySenderSignature = { _, _ -> true },
+		verifySenderSignature = verifySignature,
 		localIdentity = identityKey,
 		signSession = { Signature(byteArrayOf(9)) },
 		verifySession = { _, _, _ -> true },
 	)
+
+	val packetId = com.netless.common.PacketId("packet")
+	fun packet() = com.netless.protocol.VersionedPacketCodec.encode(com.netless.protocol.PacketEnvelope(
+		com.netless.protocol.ForwardingEnvelope(packetId, NodeId("destination"), NodeId("local"), 0, 1, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
+		content().copy(senderSignature = byteArrayOf(1)), createdAtEpochMillis = 0, expiresAtEpochMillis = Long.MAX_VALUE
+	))
 
 	private fun endpoint(type: TransportType, node: String) = TransportEndpoint(NodeId(node), type.name, mapOf(
 		"nodeId" to node,
@@ -98,7 +117,10 @@ private class FakeAdapter(override val type: TransportType, private val network:
 			override suspend fun send(packet: ByteArray) {
 				val forwarded = ControlCodec.decode(packet) as Forward
 				val decoded = com.netless.protocol.VersionedPacketCodec.decode(forwarded.packet)
-				incoming = kotlinx.coroutines.flow.flowOf(ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)))
+				incoming = kotlinx.coroutines.flow.flowOf(
+					ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)),
+					ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, endpoint.nodeId, 0L))
+				)
 			}
 			 override suspend fun close() = Unit
 			private var incoming: kotlinx.coroutines.flow.Flow<ByteArray> = emptyFlow()

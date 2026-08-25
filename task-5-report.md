@@ -89,4 +89,20 @@ Verification: `git diff --check` passed. Kotlin tests were not run because this 
 - Added final-delivery state to acknowledgement control frames. A relay now propagates final delivery upstream and deletes its stored packet only after that receipt; hop acceptance alone remains pending.
 - `PeerMessageRuntime` remains explicitly authenticated in production through `AppContainer`; no unauthenticated startup path is claimed.
 
+## Latest Task 5 finding fix
+
+- `MeshRuntime.forward` now accepts either an immediate final `HopAcknowledgement` or a terminal `DeliveryReceipt` after intermediate-hop acceptance, and deletes the local relay record only after terminal confirmation.
+- Incoming terminal receipts are admitted only for locally stored relay records, are re-emitted upstream, and produce terminal delivery observations; forged or duplicate receipts are rejected without deleting state.
+- Invalid packet signatures now emit a `Failed` observation before the existing validation failure is returned.
+
+Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable.
+
 Verification: `git diff --check` passed. Kotlin/Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. Focused multi-instance forged-ack and failure tests remain environment-limited.
+
+## Latest Task 5 High finding
+
+- Forwarding now accepts a validated immediate `HopAcknowledgement` followed by a validated terminal `DeliveryReceipt`, or a terminal receipt directly, and propagates terminal delivery upstream before deleting local relay state.
+- Receive validation failures emit a `Failed` observation; terminal receipts must identify the packet destination and be `Delivered`, preventing forged or duplicate admissions from confirming delivery.
+- Added regression coverage for missing-signature failure observation; existing acknowledgement and relay-retention coverage remains in place.
+
+Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. The multi-instance receipt-propagation, forged-receipt, duplicate-admission, and failure-observation scenarios remain unexecuted in this environment.

@@ -67,10 +67,17 @@ class MeshRuntime(
 
 	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
 		val now = nowMillis()
-		val packet = codec.decode(bytes, now)
-		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
-		require(validIntegrity(packet, bytes)) { "packet integrity check failed" }
-		require(verifySenderSignature(packet, canonical(packet))) { "packet signature check failed" }
+		val packet = try {
+			codec.decode(bytes, now).also {
+				require(it.forwarding.currentNodeId == localNode && (it.forwarding.nextHop == null || it.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
+				require(validIntegrity(it, bytes)) { "packet integrity check failed" }
+				require(verifySenderSignature(it, canonical(it))) { "packet signature check failed" }
+			}
+		} catch (error: Exception) {
+			val packetId = runCatching { codec.decode(bytes, now).forwarding.packetId }.getOrNull()
+			if (packetId != null) emit(receipt(packetId, DeliveryState.Failed))
+			throw error
+		}
 		if (relayStore?.contains(packet.forwarding.packetId) == true)
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying)
 		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
@@ -99,7 +106,14 @@ class MeshRuntime(
 				if (receipt.state == DeliveryState.Delivered) ControlCodec.receipt(receipt) else ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0))
 			}
 			is Acknowledgement -> frame
-			is Receipt -> { if (decoded.value.state == DeliveryState.Delivered) relayStore?.markDelivered(decoded.value.packetId); frame }
+			is Receipt -> {
+				require(decoded.value.state == DeliveryState.Delivered) { "non-terminal receipt" }
+				require(relayStore?.contains(decoded.value.packetId) == true) { "receipt is not admitted" }
+			val result = receipt(decoded.value.packetId, DeliveryState.Delivered)
+				relayStore?.markDelivered(decoded.value.packetId)
+				emit(result)
+				ControlCodec.receipt(result)
+			}
 		}
 	}
 
@@ -120,11 +134,26 @@ class MeshRuntime(
 				require(localIdentity != null && signSession != null && verifySession != null) { "authenticated transport configuration is required" }
 				val connection = adapter.connectAuthenticated(hop.endpoint, com.netless.transport.AuthenticatedConnectionRequest(expectedKey, hop.endpoint.metadata["sessionId"] ?: UUID.randomUUID().toString(), 1, signSession!!, verifySession!!))
 				connection.send(ControlCodec.forward(bytes))
-				val acknowledgement = connection.incomingPackets.first()
-				val ack = ControlCodec.decode(acknowledgement)
-				require(ack is Acknowledgement && ack.value.packetId == packetId && ack.value.nodeId == hop.nextNodeId && ack.value.accepted)
-				finalDelivery = ack.value.finalDelivery
-				if (ack.value.finalDelivery) relayStore?.markDelivered(packetId)
+			when (val response = ControlCodec.decode(connection.incomingPackets.first())) {
+				is Receipt -> {
+					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && response.value.state == DeliveryState.Delivered)
+					finalDelivery = true
+					relayStore?.markDelivered(packetId)
+				}
+				is Acknowledgement -> {
+					require(response.value.packetId == packetId && response.value.nodeId == hop.nextNodeId && response.value.accepted)
+					if (response.value.finalDelivery) {
+						finalDelivery = true
+						relayStore?.markDelivered(packetId)
+					} else {
+						val receipt = ControlCodec.decode(connection.incomingPackets.first())
+						require(receipt is Receipt && receipt.value.packetId == packetId && receipt.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && receipt.value.state == DeliveryState.Delivered)
+						finalDelivery = true
+						relayStore?.markDelivered(packetId)
+					}
+				}
+				else -> error("unexpected control response")
+			}
 				connection.close()
 			} catch (error: Exception) {
 				try { adapter.fail() } catch (_: Exception) { }
