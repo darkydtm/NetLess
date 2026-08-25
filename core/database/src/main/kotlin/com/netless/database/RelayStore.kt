@@ -35,6 +35,7 @@ class RelayStore(
 
 	init {
 		load()
+		expire(nowMillis())
 	}
 
 	@Synchronized
@@ -82,10 +83,13 @@ class RelayStore(
 		val file = storageFile ?: return
 		if (!file.isFile || file.length() == 0L) return
 		DataInputStream(file.inputStream().buffered()).use { input ->
-			repeat(input.readInt()) {
-				val key = input.readUTF()
-				deduplication[key] = input.readLong()
-				if (input.readBoolean()) records[key] = input.readBytes()
+				repeat(input.readInt()) {
+					val key = input.readUTF()
+					deduplication[key] = input.readLong()
+					if (input.readBoolean()) {
+						val size = input.readInt()
+						records[key] = ByteArray(size).also(input::readFully)
+					}
 			}
 		}
 	}
