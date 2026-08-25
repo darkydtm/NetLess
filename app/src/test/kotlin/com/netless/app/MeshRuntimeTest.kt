@@ -92,6 +92,14 @@ class MeshRuntimeTest {
 		assertTrue(network.relayStore.contains(result.packetId))
 		assertTrue(runCatching { network.relay.receiveFrame(ControlCodec.receipt(DeliveryReceipt(result.packetId, DeliveryState.Delivered, network.destinationId, 1_000L)), TransportType.Bluetooth) }.isFailure)
 	}
+
+	@Test
+	fun `rejects forged authenticated session in three-node network`() = runTest {
+		val network = ThreeNodeNetwork().also { it.forgeSession = true }
+
+		assertEquals(DeliveryState.Failed, network.origin.send(content(), network.destinationId, TransportPolicy.Automatic()).state)
+		assertTrue(network.usedTransports.isEmpty())
+	}
 	@Test
 	fun `forwards one packet through bluetooth then wifi direct`() = runTest {
 		val network = FakeNetwork()
@@ -184,6 +192,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	var relayReceipt: DeliveryReceipt? = null
 	var originReceipt: DeliveryReceipt? = null
 	var relayFailureReceipt: DeliveryReceipt? = null
+	var forgeSession = false
 	private val keys = mapOf("origin" to PublicKey(byteArrayOf(1)), "relay" to PublicKey(byteArrayOf(2)), "destination" to PublicKey(byteArrayOf(3)))
 	lateinit var origin: MeshRuntime
 	lateinit var relay: MeshRuntime
@@ -197,7 +206,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			relayStore = store, signPacket = { sign(keys.getValue(node.value), it) }, verifySenderSignature = { packet, data ->
 				keys[packet.content.sender.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true
 			}, onContent = onContent,
-			localIdentity = keys.getValue(node.value), signSession = { signSession(keys.getValue(node.value), it) }, verifySession = { key, data, signature -> signSession(key, data) == signature }, nowMillis = { 1_000L }
+			localIdentity = keys.getValue(node.value), signSession = { signSession(keys.getValue(node.value), it) }, verifySession = { key, data, signature -> keys.values.any { it == key } && signSession(key, data) == signature }, nowMillis = { 1_000L }
 		)
 		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
 		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
@@ -216,13 +225,14 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			onContent = { received = it; contentDeliveries++ },
 			localIdentity = keys.getValue(destinationId.value),
 			signSession = { signSession(keys.getValue(destinationId.value), it) },
-			verifySession = { key, data, signature -> signSession(key, data) == signature },
+			verifySession = { key, data, signature -> keys.values.any { it == key } && signSession(key, data) == signature },
 			nowMillis = { 1_000L },
 		)
 	}
 
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)
 	private fun signSession(key: PublicKey, data: ByteArray) = Signature(sign(key, data))
+	private fun sessionChallenge(protocolVersion: Int, sessionId: String, identity: PublicKey) = "$protocolVersion:$sessionId".encodeToByteArray() + identity.encoded
 
 	private fun endpoint(type: TransportType, node: NodeId) = TransportEndpoint(node, type.name, mapOf("nodeId" to node.value, "identityKey" to Base64.getEncoder().encodeToString(keys.getValue(node.value).encoded), "sessionId" to "${type.name}:${node.value}"))
 
@@ -232,6 +242,9 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			require(endpoint.nodeId == peer && request.expectedPeerIdentity == network.keys.getValue(peer.value))
 			require(request.sessionId == "${type.name}:${peer.value}")
 			require(request.protocolVersion == 1)
+			val challenge = sessionChallenge(request.protocolVersion, request.sessionId, request.expectedPeerIdentity)
+			val signature = if (network.forgeSession) Signature(byteArrayOf(0)) else request.sign(challenge)
+			require(request.verify(request.expectedPeerIdentity, challenge, signature)) { "forged session rejected" }
 			network.usedTransports += type
 			return object : TransportConnection {
 				override val peerIdentity = network.keys.getValue(peer.value)
@@ -264,6 +277,7 @@ private class FakeNetwork {
 	private val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
 	var forwardedPacket: ByteArray? = null
+	var forgeSession = false
 
 	fun runtime(local: NodeId = NodeId("local"), now: Long = 1000L, verifySignature: suspend (com.netless.protocol.PacketEnvelope, ByteArray) -> Boolean = { _, _ -> true }, relayStore: RelayStore? = this.relayStore) = MeshRuntime(
 		local,
@@ -283,8 +297,8 @@ private class FakeNetwork {
 		signPacket = { byteArrayOf(9) },
 		verifySenderSignature = verifySignature,
 		localIdentity = identityKey,
-		signSession = { Signature(byteArrayOf(9)) },
-		verifySession = { _, _, _ -> true },
+		signSession = { Signature(MessageDigest.getInstance("SHA-256").digest(identityKey.encoded + it)) },
+		verifySession = { key, data, signature -> key == identityKey && MessageDigest.getInstance("SHA-256").digest(key.encoded + data).contentEquals(signature.bytes) },
 		nowMillis = { now },
 	)
 
@@ -324,6 +338,9 @@ private class FakeAdapter(override val type: TransportType, private val network:
 	override suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest): TransportConnection {
 		require(request.expectedPeerIdentity == network.identityKey)
 		require(request.sessionId == "${type.name}:${endpoint.nodeId.value}" && request.protocolVersion == 1)
+		val challenge = "${request.protocolVersion}:${request.sessionId}".encodeToByteArray() + request.expectedPeerIdentity.encoded
+		val signature = if (network.forgeSession) Signature(byteArrayOf(0)) else request.sign(challenge)
+		require(request.verify(network.identityKey, challenge, signature)) { "forged session rejected" }
 		return connect(endpoint)
 	}
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = true

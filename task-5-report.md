@@ -27,6 +27,14 @@ Known boundary:
 
 Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The requested actual multi-instance runtime tests could not be executed in this environment.
 
+## Remaining test review gap
+
+- Replaced test transport allow-all session verification with deterministic signatures bound to the expected identity, protocol version, and session ID.
+- Fake authenticated connections now reject forged signatures and expose the verified peer identity.
+- Added a three-node forged-session rejection test.
+
+Verification: `git diff --check` passed. Tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Final Task 5 review follow-up
 
 - Forwarding envelopes now carry the current node and are rewritten for each relay; the versioned codec preserves this metadata while legacy constructor/codec paths remain available.
