@@ -3,6 +3,7 @@ package com.netless.identity
 import com.netless.common.ProfileId
 import com.netless.crypto.PublicKey
 import com.netless.crypto.Signature
+import com.netless.crypto.PrivateKeyRef
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +12,8 @@ interface IdentityRepository {
 	suspend fun getOrCreateIdentity(): DeviceIdentity
 	fun observeProfile(): Flow<Profile>
 	suspend fun updateProfile(command: UpdateProfileCommand): Profile
+	suspend fun sign(data: ByteArray): Signature = error("identity signing is unavailable")
+	suspend fun verify(publicKey: PublicKey, data: ByteArray, signature: Signature): Boolean = false
 }
 
 data class DeviceIdentity(

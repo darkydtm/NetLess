@@ -57,6 +57,26 @@ class SessionTransport(private val socket: Socket) {
 		}
 	}
 
+	suspend fun acceptAuthenticated(
+		protocolVersion: Int,
+		identityPublicKey: PublicKey,
+		sign: suspend (ByteArray) -> Signature,
+		verify: suspend (PublicKey, ByteArray, Signature) -> Boolean,
+	): SecretKey {
+		require(protocolVersion > 0) { "invalid protocol version" }
+		val remote = readOffer(protocolVersion, readSessionId = true)
+		require(verify(remote.identityPublicKey, exchangePayload(remote.sessionId, remote.ephemeralPublicKey, remote.identityPublicKey), remote.signature)) {
+			throw SecurityException("session identity signature failed")
+		}
+		val local = EphemeralKeyExchange.generate()
+		val offer = KeyExchangeOffer(remote.sessionId, local.publicKey, identityPublicKey, sign(exchangePayload(remote.sessionId, local.publicKey, identityPublicKey)))
+		writeOffer(protocolVersion, offer)
+		return local.derive(remote.ephemeralPublicKey, EphemeralKeyExchange.transcript(local.publicKey, remote.ephemeralPublicKey, remote.sessionId)).also {
+			negotiatedKey = it
+			authenticatedSessionId = remote.sessionId
+		}
+	}
+
 	val sessionKey: SecretKey
 		get() = negotiatedKey ?: error("session is not authenticated")
 
@@ -108,11 +128,12 @@ class SessionTransport(private val socket: Socket) {
 		}
 	}
 
-	private fun readOffer(protocolVersion: Int, sessionId: String): KeyExchangeOffer {
+	private fun readOffer(protocolVersion: Int, sessionId: String? = null, readSessionId: Boolean = false): KeyExchangeOffer {
 		require(input.readInt() == protocolVersion) { "session protocol mismatch" }
-		require(input.readUTF() == sessionId) { "session id mismatch" }
+		val receivedSessionId = input.readUTF()
+		require(readSessionId || receivedSessionId == sessionId) { "session id mismatch" }
 		return KeyExchangeOffer(
-			sessionId,
+			receivedSessionId,
 			readBytes(),
 			PublicKey(readBytes()),
 			Signature(readBytes()),

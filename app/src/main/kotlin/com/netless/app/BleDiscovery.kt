@@ -83,6 +83,7 @@ class AndroidBleDiscoveryTransport(context: Context) : com.netless.transport.Dis
 		get() = adapter?.bluetoothLeAdvertiser
 	private var scanCallback: ScanCallback? = null
 	private var advertiseCallback: AdvertiseCallback? = null
+	private var localAdvertisement: DiscoveryAdvertisement? = null
 
 	@SuppressLint("MissingPermission")
 	override suspend fun startDiscovery() = callbackFlow {
@@ -131,6 +132,7 @@ class AndroidBleDiscoveryTransport(context: Context) : com.netless.transport.Dis
 
 	@SuppressLint("MissingPermission")
 	override suspend fun advertise(advertisement: DiscoveryAdvertisement) {
+		localAdvertisement = advertisement
 		val bleAdvertiser = advertiser ?: error("Bluetooth LE advertiser unavailable")
 		advertiseCallback?.let { bleAdvertiser.stopAdvertising(it) }
 		val settings = AdvertiseSettings.Builder()
