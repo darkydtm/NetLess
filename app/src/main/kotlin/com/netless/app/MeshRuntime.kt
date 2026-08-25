@@ -104,17 +104,20 @@ class MeshRuntime(
 
 	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?): DeliveryReceipt {
 		if (hop == null) return receipt(packetId, DeliveryState.Failed).also(::emit)
+		require(hop.endpoint.nodeId == hop.nextNodeId) { "endpoint node identity does not match route hop" }
+		require(hop.endpoint.metadata["nodeId"] == hop.nextNodeId.value) { "missing or inconsistent endpoint node identity" }
+		require(!hop.endpoint.metadata["identityKey"].isNullOrBlank()) { "missing endpoint identity key" }
 		val adapter = transports.available(hop.transport)
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
-				val expectedKey = hop.endpoint.metadata["identityKey"]?.let { com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(it)) }
+				require(hop.endpoint.metadata["nodeId"] == hop.nextNodeId.value) { "endpoint node identity is missing or inconsistent" }
+				val expectedKey = com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(hop.endpoint.metadata.getValue("identityKey")))
 				require(expectedKey != null && connection.peerIdentity?.encoded?.contentEquals(expectedKey.encoded) == true) { "session identity does not match endpoint" }
 				connection.send(ControlCodec.forward(bytes))
 				val acknowledgement = connection.incomingPackets.first()
 				val ack = ControlCodec.decode(acknowledgement)
 				require(ack is Acknowledgement && ack.value.packetId == packetId && ack.value.nodeId == hop.nextNodeId && ack.value.accepted)
-				relayStore?.markDelivered(packetId)
 				connection.close()
 			} catch (error: Exception) {
 				try { adapter.fail() } catch (_: Exception) { }

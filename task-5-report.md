@@ -73,4 +73,12 @@ Verification: `git diff --check` passed. Kotlin tests could not run because this
 - Incoming sessions return typed acknowledgements after packet processing; final nodes still hand off opaque content before acknowledging the previous hop.
 - Added acknowledgement-aware fake transport coverage to the existing two-hop runtime test, including transport fallback behavior.
 
+## Review Blocker Fixes
+
+- Hop acknowledgements now mean next-hop acceptance only; relay records remain pending until final-node delivery or an explicit end-to-end receipt.
+- Endpoint metadata must include matching `nodeId` and authenticated `identityKey` values; connection and acknowledgement failures remain fail-closed.
+- MeshRuntime fakes now provide endpoint identity metadata and peer identities, with a persistence assertion after first-hop acceptance.
+
+Verification: `git diff --check` passed. Kotlin tests were not run because this checkout has no Gradle wrapper or system Gradle executable.
+
 Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The full three-node forged/duplicate/failure integration scenarios remain unverified in this environment.

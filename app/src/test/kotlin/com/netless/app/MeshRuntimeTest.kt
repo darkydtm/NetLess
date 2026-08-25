@@ -22,6 +22,10 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import com.netless.crypto.PublicKey
+import com.netless.database.RelayStore
+import java.util.Base64
 
 class MeshRuntimeTest {
 	@Test
@@ -30,8 +34,9 @@ class MeshRuntimeTest {
 		val runtime = network.runtime()
 		val result = runtime.send(content(), NodeId("destination"), TransportPolicy.Automatic())
 
-		assertEquals(DeliveryState.Delivered, result.state)
-		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
+		assertEquals(DeliveryState.Relaying, result.state)
+		assertEquals(listOf(TransportType.Bluetooth), network.usedTransports)
+		assertTrue(network.relayStore.count() > 0)
 	}
 
 	@Test
@@ -39,7 +44,7 @@ class MeshRuntimeTest {
 		val network = FakeNetwork().also { it.disabled += TransportType.Bluetooth }
 		val runtime = network.runtime()
 
-		assertEquals(DeliveryState.Delivered, runtime.send(content(), NodeId("destination"), TransportPolicy.Preferred(listOf(TransportType.Bluetooth, TransportType.WifiDirect))).state)
+		assertEquals(DeliveryState.Relaying, runtime.send(content(), NodeId("destination"), TransportPolicy.Preferred(listOf(TransportType.Bluetooth, TransportType.WifiDirect))).state)
 		assertEquals(listOf(TransportType.WifiDirect), network.usedTransports)
 	}
 
@@ -49,6 +54,8 @@ class MeshRuntimeTest {
 private class FakeNetwork {
 	val usedTransports = mutableListOf<TransportType>()
 	val disabled = mutableSetOf<TransportType>()
+	val relayStore = RelayStore()
+	private val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
 	fun runtime() = MeshRuntime(
 		NodeId("local"),
@@ -63,9 +70,13 @@ private class FakeNetwork {
 			)
 			Route(listOf(NodeId("local"), NodeId("relay"), destination), metrics(), hops = hops)
 		},
+		relayStore = relayStore,
 	)
 
-	private fun endpoint(type: TransportType, node: String) = TransportEndpoint(NodeId(node), type.name)
+	private fun endpoint(type: TransportType, node: String) = TransportEndpoint(NodeId(node), type.name, mapOf(
+		"nodeId" to node,
+		"identityKey" to Base64.getEncoder().encodeToString(identityKey.encoded),
+	))
 	private fun metrics() = RouteMetrics(1.0, 1.0, 1.0, 1.0)
 }
 
@@ -75,6 +86,7 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		if (type in network.disabled) error("unavailable")
 		network.usedTransports += type
 		return object : TransportConnection {
+			override val peerIdentity: PublicKey = network.identityKey
 			override val incomingPackets: kotlinx.coroutines.flow.Flow<ByteArray>
 				get() = incoming
 			override suspend fun send(packet: ByteArray) {
