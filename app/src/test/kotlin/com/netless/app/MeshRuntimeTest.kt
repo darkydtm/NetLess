@@ -32,6 +32,7 @@ import com.netless.crypto.Signature
 import com.netless.database.RelayStore
 import java.util.Base64
 import java.security.MessageDigest
+import java.io.File
 
 class MeshRuntimeTest {
 	@Test
@@ -61,13 +62,19 @@ class MeshRuntimeTest {
 		val network = ThreeNodeNetwork()
 		val result = network.origin.send(content(), network.destinationId, TransportPolicy.Automatic())
 		val packet = network.destinationPacket!!
+		val receipt = network.destinationReceipt
+
+		network.restartDestination()
 
 		assertEquals(network.destinationReceipt, network.destination.receive(packet, TransportType.WifiDirect))
 		assertEquals(1, network.contentDeliveries)
-		assertEquals(result.packetId, network.destinationReceipt?.packetId)
-		assertEquals(network.destinationId, network.destinationReceipt?.nodeId)
+		assertEquals(receipt, network.destinationReceipt)
+		assertEquals(result.packetId, receipt?.packetId)
+		assertEquals(network.destinationId, receipt?.nodeId)
 		assertTrue(!network.destinationStore.hasPending(result.packetId))
 		assertTrue(network.destinationStore.contains(result.packetId))
+		assertTrue(!network.originStore.contains(result.packetId))
+		assertTrue(!network.relayStore.contains(result.packetId))
 	}
 
 	@Test
@@ -164,7 +171,9 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	val usedTransports = mutableListOf<TransportType>()
 	val originStore = RelayStore()
 	val relayStore = RelayStore()
-	val destinationStore = RelayStore()
+	private val destinationFile = File.createTempFile("mesh-destination", ".bin").also { it.delete() }
+	private val keyStore = com.netless.database.DatabaseKeyStore()
+	var destinationStore = RelayStore(keyStore, destinationFile, nowMillis = { 1_000L })
 	var received: ContentEnvelope? = null
 	var contentDeliveries = 0
 	var destinationPacket: ByteArray? = null
@@ -192,6 +201,23 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
 		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
 		destination = runtime(destinationId, destinationStore, emptyList()) { if (failDestination) error("destination rejected content") else { received = it; contentDeliveries++ } }
+	}
+
+	fun restartDestination() {
+		destinationStore = RelayStore(keyStore, destinationFile, nowMillis = { 1_000L })
+		destination = MeshRuntime(
+			destinationId,
+			TransportRegistry(),
+			{ error("destination has no outbound route") },
+			relayStore = destinationStore,
+			signPacket = { sign(keys.getValue(destinationId.value), it) },
+			verifySenderSignature = { packet, data -> keys[packet.content.sender.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true },
+			onContent = { received = it; contentDeliveries++ },
+			localIdentity = keys.getValue(destinationId.value),
+			signSession = { signSession(keys.getValue(destinationId.value), it) },
+			verifySession = { key, data, signature -> signSession(key, data) == signature },
+			nowMillis = { 1_000L },
+		)
 	}
 
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)

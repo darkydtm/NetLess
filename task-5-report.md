@@ -114,6 +114,13 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Task 5 restart replay assertion
+
+- Extended the three-node `MeshRuntimeTest` to persist the destination terminal receipt, recreate the destination `RelayStore` and `MeshRuntime` with the same file and key store, and retry the identical packet.
+- Asserted unchanged receipt replay, single destination content callback invocation, retained destination tombstone, and completed origin/relay cleanup.
+
+Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Final Task 5 blockers
 
 - Replaced repeated cold-flow `incomingPackets.first()` subscriptions with one connection stream collector and queue; ordered acknowledgement plus terminal receipt and single-frame terminal delivery are both consumed correctly.
