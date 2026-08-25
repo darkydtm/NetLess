@@ -1,5 +1,10 @@
 # Task 6 Report
 
+## Completion Update
+
+- Implemented conversation-layer decoding of sealed incoming `ContentEnvelope` payloads into persisted unread `ChatMessage` records; malformed payloads remain on the opaque callback path.
+- Added live conversation and message projections, restart persistence, contact identity mapping, and delivery-state persistence.
+
 ## Scope
 
 Implemented persistent conversation message and contact projections over `DurableEncryptedContentStore`, with restart reconstruction, contact identity keyed by profile ID, and queued/delivery state flows. The relay boundary remains opaque: the repository accepts an optional typed `ContentEnvelope` callback and never decodes relay payload bytes.

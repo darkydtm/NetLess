@@ -70,7 +70,8 @@ class AppContainer(application: Application) {
 		override suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState {
 				val contact = conversations.contacts().firstOrNull { it.profileId == conversationId } ?: error("unknown conversation")
 				val destination = com.netless.common.NodeId(contact.endpoint ?: contact.profileId)
-				val payload = contentStore.seal(text.encodeToByteArray())
+				val messageId = UUID.randomUUID().toString()
+				val payload = contentStore.seal(conversations.encodeContent(conversationId, messageId, text))
 				val envelope = com.netless.protocol.ContentEnvelope(UUID.randomUUID().toString(), localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload, identityRepository.sign(payload).bytes)
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state

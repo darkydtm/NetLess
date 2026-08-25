@@ -1,5 +1,10 @@
 # Task 7 Report
 
+## Completion Update
+
+- Added stable `ProfileId | display name` contact creation input, including QR-or-code text parsing through the ViewModel.
+- Wired outgoing payloads to the conversation codec and retained transport-policy delivery flows and cancellation-aware coroutine collection.
+
 ## Status
 
 - Replaced the permanent failed sender with a `MeshRuntime.send` bridge.

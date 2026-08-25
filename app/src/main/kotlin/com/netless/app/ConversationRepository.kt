@@ -40,10 +40,20 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun addContact(profileId: String, displayName: String) = synchronized(lock) { require(profileId.isNotBlank() && displayName.isNotBlank()); val contact = Contact(profileId, displayName); contacts[profileId] = contact; store.put("contact:$profileId", encode(contact)); publish() }
 	fun updateEndpoint(profileId: String, endpoint: String) = synchronized(lock) { require(endpoint.isNotBlank()); val contact = contacts[profileId] ?: error("unknown contact"); contacts[profileId] = contact.copy(endpoint = endpoint); store.put("contact:$profileId", encode(contacts.getValue(profileId))); publish() }
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
-	suspend fun onIncomingContent(content: ContentEnvelope) { onContent(content) }
+	suspend fun onIncomingContent(content: ContentEnvelope) {
+		runCatching {
+			val input = DataInputStream(ByteArrayInputStream(store.open(content.encryptedPayload)))
+			val conversationId = input.readUTF()
+			val messageId = input.readUTF()
+			val body = input.readUTF()
+			require(input.available() == 0)
+			addIncoming(ChatMessage(messageId, conversationId, body, System.currentTimeMillis(), DeliveryState.Delivered, false))
+		}.getOrElse { onContent(content) }
+	}
 	fun send(conversationId: String, text: String, policy: SendPolicy): Flow<DeliveryState> = kotlinx.coroutines.flow.flow {
 		require(conversationId.isNotBlank() && text.isNotBlank()); val message = ChatMessage(UUID.randomUUID().toString(), conversationId, text, System.currentTimeMillis(), DeliveryState.Queued); save(message); emit(DeliveryState.Queued); val result = runCatching { sender.send(conversationId, text, policy) }.getOrDefault(DeliveryState.Failed); save(message.copy(deliveryState = result)); emit(result)
 	}
+	fun encodeContent(conversationId: String, messageId: String, text: String): ByteArray = ByteArrayOutputStream().also { output -> DataOutputStream(output).use { it.writeUTF(conversationId); it.writeUTF(messageId); it.writeUTF(text) } }.toByteArray()
 	fun addIncoming(message: ChatMessage) = save(message.copy(read = false))
 	private fun save(message: ChatMessage) = synchronized(lock) { messages[message.id] = message; store.put("conversation-message:${message.id}", encode(message)); publish() }
 	private fun publish() { state.value = messages.values.toList(); conversationState.value = messages.values.groupBy { it.conversationId }.map { (id, values) -> values.maxBy { it.timestamp }.let { ConversationSummary(id, contacts[id]?.profileId ?: id, it.body, it.timestamp, values.count { !it.read }, it.deliveryState) } } }

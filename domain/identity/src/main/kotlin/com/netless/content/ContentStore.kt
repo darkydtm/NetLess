@@ -57,6 +57,8 @@ class DurableEncryptedContentStore(
 
 	fun seal(content: ByteArray): ByteArray = cipher.encrypt(content)
 
+	fun open(content: ByteArray): ByteArray = cipher.decrypt(content)
+
 	private fun load() {
 		if (!file.isFile) return
 		file.readLines().forEach { line ->

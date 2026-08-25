@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -38,7 +39,7 @@ class MessengerViewModel(
 	init {
 		repository?.let { repo ->
 			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }) } } }
-			viewModelScope.launch { repo.observeMessages(_uiState.value.selectedConversation).collect { messages -> _uiState.update { it.copy(messages = messages) } } }
+			viewModelScope.launch { _uiState.flatMapLatest { repo.observeMessages(it.selectedConversation) }.collect { messages -> _uiState.update { it.copy(messages = messages) } } }
 		}
 	}
 
@@ -47,6 +48,15 @@ class MessengerViewModel(
 	fun selectConversation(id: String) { _uiState.update { it.copy(selectedConversation = id, currentTab = MessengerTab.Chats, messages = repository?.messages(id).orEmpty()) }; repository?.markRead(id) }
 
 	fun draftChanged(text: String) = _uiState.update { it.copy(draft = text) }
+
+	fun addContact(profileId: String, displayName: String) {
+		repository?.addContact(profileId.trim(), displayName.trim())
+	}
+
+	fun addContactText(value: String) {
+		val parts = value.trim().split('|', limit = 2)
+		if (parts.size == 2) addContact(parts[0], parts[1])
+	}
 
 	fun send(text: String = uiState.value.draft) {
 		if (text.isBlank()) return
