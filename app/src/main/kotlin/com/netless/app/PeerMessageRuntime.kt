@@ -69,7 +69,7 @@ class PeerMessageRuntime(
 		try {
 			session.packets().collect { packet ->
 				val response = receiveFrame?.invoke(packet, com.netless.transport.TransportType.WifiDirect)
-					?: receivePacket(packet, com.netless.transport.TransportType).let { null }
+					?: receivePacket(packet, com.netless.transport.TransportType.WifiDirect).let { null }
 				if (response != null) session.send(response)
 			}
 		} finally {

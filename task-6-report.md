@@ -18,6 +18,21 @@ Implemented persistent conversation message and contact projections over `Durabl
 - `git diff --check` passed.
 - No APK or full Android build was run, as requested.
 
+## Review Fixes
+
+- Replaced cold conversation snapshots with live `StateFlow` projections for messages and summaries.
+- Persisted read flags and unread counts, with synchronized `markRead` updates.
+- Replaced NUL-delimited records with length-prefixed `DataOutputStream` records and skipped malformed records during startup.
+- Loaded both current conversation keys and legacy `message:` keys as a compatibility bridge; `MessageRepository` is no longer wired as a second content sink.
+- Routed opaque `ContentEnvelope` instances through the conversation callback without decoding relay plaintext.
+- Kept queued and terminal delivery emissions, validation, sender invocation/error conversion, and synchronized in-memory updates.
+- Fixed `PeerMessageRuntime` to pass `TransportType.WifiDirect` to the legacy receive callback.
+
+## Verification
+
+- `git diff --check` passed.
+- Gradle tests remain unavailable because this checkout has no Gradle wrapper; Android/Kotlin compilation was not run.
+
 ## Limitations
 
 - The current workspace does not expose a runnable Gradle wrapper, so Kotlin compilation and tests remain unverified locally.
