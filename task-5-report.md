@@ -121,3 +121,10 @@ Verification: `git diff --check` passed. Kotlin tests were not runnable because 
 - Added regression coverage for missing-signature failure observation; existing acknowledgement and relay-retention coverage remains in place.
 
 Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. The multi-instance receipt-propagation, forged-receipt, duplicate-admission, and failure-observation scenarios remain unexecuted in this environment.
+
+## Receipt ingress correction
+
+- Tightened terminal receipt admission to require a pending relay with a downstream next hop.
+- Tightened forwarding validation so terminal receipts and terminal acknowledgements identify the authenticated final hop, while intermediate terminal acknowledgements remain rejected.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
