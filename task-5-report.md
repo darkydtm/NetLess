@@ -99,6 +99,14 @@ Verification: `git diff --check` passed. Gradle tests remain unavailable because
 
 Verification: `git diff --check` passed. Kotlin/Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable. Focused multi-instance forged-ack and failure tests remain environment-limited.
 
+## Task 5 High finding correction
+
+- Terminal receipt admission now loads the pending relay packet and requires the receipt node to equal the packet's immutable final destination.
+- A validated terminal receipt is propagated unchanged and removes local relay state only after validation; forged and duplicate receipts remain rejected.
+- Updated the one-hop fake transport to model an immediate hop acknowledgement followed by a final destination receipt, and added forged/duplicate admission coverage.
+
+Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 High finding
 
 - Forwarding now accepts a validated immediate `HopAcknowledgement` followed by a validated terminal `DeliveryReceipt`, or a terminal receipt directly, and propagates terminal delivery upstream before deleting local relay state.

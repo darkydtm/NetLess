@@ -62,6 +62,20 @@ class MeshRuntimeTest {
 		assertEquals(DeliveryState.Failed, runtime.observeDelivery(network.packetId).first().state)
 	}
 
+	@Test
+	fun `forged and duplicate receipts are rejected`() = runTest {
+		val network = FakeNetwork()
+		val runtime = network.runtime()
+		network.relayStore.put(network.packet(), network.packetId, Long.MAX_VALUE, NodeId("relay"))
+
+		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("attacker"), 0L)), TransportType.Bluetooth) }.isFailure)
+		assertTrue(network.relayStore.contains(network.packetId))
+
+		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth)
+		assertTrue(!network.relayStore.contains(network.packetId))
+		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth) }.isFailure)
+	}
+
 	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 }
 
@@ -119,7 +133,7 @@ private class FakeAdapter(override val type: TransportType, private val network:
 				val decoded = com.netless.protocol.VersionedPacketCodec.decode(forwarded.packet)
 				incoming = kotlinx.coroutines.flow.flowOf(
 					ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)),
-					ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, endpoint.nodeId, 0L))
+					ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, decoded.forwarding.finalNodeId, 0L))
 				)
 			}
 			 override suspend fun close() = Unit

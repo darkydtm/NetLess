@@ -108,8 +108,10 @@ class MeshRuntime(
 			is Acknowledgement -> frame
 			is Receipt -> {
 				require(decoded.value.state == DeliveryState.Delivered) { "non-terminal receipt" }
-				require(relayStore?.contains(decoded.value.packetId) == true) { "receipt is not admitted" }
-			val result = receipt(decoded.value.packetId, DeliveryState.Delivered)
+				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
+				val packet = codec.decode(stored.packet, nowMillis())
+				require(decoded.value.nodeId == packet.forwarding.finalNodeId) { "receipt destination does not match packet" }
+				val result = decoded.value
 				relayStore?.markDelivered(decoded.value.packetId)
 				emit(result)
 				ControlCodec.receipt(result)
