@@ -62,6 +62,10 @@ class DatabaseKeyStore(private val keyWrapper: KeyWrapper = AndroidKeystoreKeyWr
 	}
 
 	fun unwrap(key: WrappedDatabaseKey): ByteArray = keyWrapper.unwrap(key.wrappedKey)
+
+	fun protect(value: ByteArray): ByteArray = keyWrapper.wrap(value)
+
+	fun unprotect(value: ByteArray): ByteArray = keyWrapper.unwrap(value)
 }
 
 class FileKeyStore(private val keyWrapper: KeyWrapper = AndroidKeystoreKeyWrapper("netless-file-key-wrapper")) {
