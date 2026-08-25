@@ -10,14 +10,9 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.StandardCharsets
 
-private interface LegacyPacketCodec {
-	fun encode(packet: PacketEnvelope): ByteArray
-	fun decode(bytes: ByteArray): PacketEnvelope
-}
-
 class UnsupportedProtocolVersionException(message: String) : IllegalArgumentException(message)
 
-class BinaryPacketCodec : LegacyPacketCodec {
+class BinaryPacketCodec {
 	private companion object {
 		const val MAGIC = 0x4E4C5031
 		const val MAX_STRING_BYTES = 65_536
@@ -25,7 +20,7 @@ class BinaryPacketCodec : LegacyPacketCodec {
 		const val MAX_RECIPIENTS = 1_024
 	}
 
-	override fun encode(packet: PacketEnvelope): ByteArray {
+	fun encode(packet: PacketEnvelope): ByteArray {
 		checkVersion(packet.version)
 		val output = ByteArrayOutputStream()
 		DataOutputStream(output).use { data ->
@@ -37,7 +32,7 @@ class BinaryPacketCodec : LegacyPacketCodec {
 		return output.toByteArray()
 	}
 
-	override fun decode(bytes: ByteArray): PacketEnvelope {
+	fun decode(bytes: ByteArray): PacketEnvelope {
 		require(bytes.isNotEmpty()) { "Packet bytes must not be empty" }
 		try {
 			DataInputStream(ByteArrayInputStream(bytes)).use { data ->
