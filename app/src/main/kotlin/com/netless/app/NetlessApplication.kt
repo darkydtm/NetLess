@@ -61,7 +61,8 @@ class AppContainer(application: Application) {
 		onContent = { content -> messages.onContent(content) },
 	)
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
-		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) })
+		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },
+		{ bytes, ingress -> meshRuntime.receiveFrame(bytes, ingress) })
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),

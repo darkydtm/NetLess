@@ -11,6 +11,9 @@ import com.netless.protocol.ForwardingEnvelope
 import com.netless.protocol.PacketEnvelope
 import com.netless.protocol.VersionedPacketCodecContract
 import com.netless.protocol.VersionedPacketCodec
+import com.netless.protocol.ControlCodec
+import com.netless.protocol.Acknowledgement
+import com.netless.protocol.HopAcknowledgement
 import com.netless.transport.TransportConnection
 import com.netless.transport.TransportPolicy
 import com.netless.transport.TransportType
@@ -58,7 +61,7 @@ class MeshRuntime(
 		return forward(bytes, packetId, selected.hops.firstOrNull())
 	}
 
-		suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
+	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
 		val now = nowMillis()
 		val packet = codec.decode(bytes, now)
 		require(packet.forwarding.currentNodeId == localNode && (packet.forwarding.nextHop == null || packet.forwarding.nextHop == localNode)) { "packet is not addressed to this node" }
@@ -85,6 +88,16 @@ class MeshRuntime(
 		return forward(forwardedBytes, packet.forwarding.packetId, hop)
 	}
 
+	suspend fun receiveFrame(frame: ByteArray, ingress: TransportType): ByteArray {
+		return when (val decoded = ControlCodec.decode(frame)) {
+			is com.netless.protocol.Forward -> {
+				val receipt = receive(decoded.packet, ingress)
+				ControlCodec.acknowledgement(HopAcknowledgement(receipt.packetId, localNode, receipt.state != DeliveryState.Failed, if (receipt.state == DeliveryState.Failed) 1 else 0))
+			}
+			is Acknowledgement -> frame
+		}
+	}
+
 	fun observeDelivery(packetId: PacketId): Flow<DeliveryReceipt> = synchronized(deliveryLock) {
 		deliveries.getOrPut(packetId) { MutableStateFlow(null) }
 	}.asStateFlow().filter { it != null }.let { flow -> kotlinx.coroutines.flow.flow { flow.collect { emit(it!!) } } }
@@ -95,7 +108,11 @@ class MeshRuntime(
 			?: return receipt(packetId, DeliveryState.Failed).also(::emit)
 			try {
 				val connection = adapter.connect(hop.endpoint)
-				connection.send(bytes)
+				connection.send(ControlCodec.forward(bytes))
+				val acknowledgement = connection.incomingPackets.first()
+				val ack = ControlCodec.decode(acknowledgement)
+				require(ack is Acknowledgement && ack.value.packetId == packetId && ack.value.nodeId == hop.nextNodeId && ack.value.accepted)
+				relayStore?.markDelivered(packetId)
 				connection.close()
 			} catch (error: Exception) {
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
@@ -120,7 +137,7 @@ class MeshRuntime(
 	}
 
 	private fun canonical(packet: PacketEnvelope): ByteArray = codec.encode(packet.copy(
-		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(1)),
 		content = packet.content.copy(senderSignature = byteArrayOf(0)),
 	), packet.createdAtEpochMillis)
 

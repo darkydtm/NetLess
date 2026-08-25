@@ -56,3 +56,12 @@ Verification: `git diff --check` passed. Gradle tests were not runnable because 
 Verification: `git diff --check` passed. Kotlin/Gradle verification was unavailable because this checkout has no Gradle wrapper or system Gradle. Typed hop-ack wire framing, ack-driven relay deletion, and the requested three-node integration test remain unimplemented and are not claimed here.
 
 Verification: `git diff --check` passed. No Gradle executable or wrapper is present, so Kotlin tests and the requested multi-instance two-hop transport tests could not run. Existing untracked workspace paths were not included.
+
+## Task 5 continuation
+
+- Added a versioned control-frame codec for packet forwarding and `HopAcknowledgement`; legacy packet codecs remain unchanged.
+- Forwarding now sends a control frame, validates the authenticated next-hop acknowledgement packet id, node id, and status, and marks relay storage delivered only after a positive acknowledgement.
+- Incoming sessions return typed acknowledgements after packet processing; final nodes still hand off opaque content before acknowledging the previous hop.
+- Added acknowledgement-aware fake transport coverage to the existing two-hop runtime test, including transport fallback behavior.
+
+Verification: `git diff --check` passed. Gradle tests remain unavailable because this checkout has no Gradle wrapper or system Gradle executable. The full three-node forged/duplicate/failure integration scenarios remain unverified in this environment.

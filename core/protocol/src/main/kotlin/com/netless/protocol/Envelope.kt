@@ -153,4 +153,5 @@ data class HopAcknowledgement(
 	val packetId: PacketId,
 	val nodeId: NodeId,
 	val accepted: Boolean,
+	val status: Int = if (accepted) 0 else 1,
 ) : Serializable

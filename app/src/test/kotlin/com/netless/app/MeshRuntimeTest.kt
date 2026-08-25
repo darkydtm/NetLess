@@ -8,6 +8,9 @@ import com.netless.network.RouteHop
 import com.netless.network.RouteMetrics
 import com.netless.protocol.ContentEnvelope
 import com.netless.protocol.DeliveryState
+import com.netless.protocol.ControlCodec
+import com.netless.protocol.Forward
+import com.netless.protocol.HopAcknowledgement
 import com.netless.transport.TransportAdapter
 import com.netless.transport.TransportConnection
 import com.netless.transport.TransportEndpoint
@@ -72,10 +75,16 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		if (type in network.disabled) error("unavailable")
 		network.usedTransports += type
 		return object : TransportConnection {
-			override val incomingPackets = emptyFlow<ByteArray>()
-			override suspend fun send(packet: ByteArray) = Unit
-			override suspend fun close() = Unit
-		}
+			override val incomingPackets: kotlinx.coroutines.flow.Flow<ByteArray>
+				get() = incoming
+			override suspend fun send(packet: ByteArray) {
+				val forwarded = ControlCodec.decode(packet) as Forward
+				val decoded = com.netless.protocol.VersionedPacketCodec.decode(forwarded.packet)
+				incoming = kotlinx.coroutines.flow.flowOf(ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)))
+			}
+			 override suspend fun close() = Unit
+			private var incoming: kotlinx.coroutines.flow.Flow<ByteArray> = emptyFlow()
+		 }
 	}
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = true
 }

@@ -18,6 +18,7 @@ class PeerMessageRuntime(
 	private val identityPublicKey: com.netless.crypto.PublicKey? = null,
 	private val sign: (suspend (ByteArray) -> com.netless.crypto.Signature)? = null,
 	private val verify: (suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean)? = null,
+	private val receiveFrame: (suspend (ByteArray, com.netless.transport.TransportType) -> ByteArray)? = null,
 ) {
 	private var serverJob: Job? = null
 	private var serverPort: Int = 0
@@ -59,7 +60,11 @@ class PeerMessageRuntime(
 
 	private suspend fun accept(session: SessionTransport) {
 		try {
-			session.packets().collect { receivePacket(it, com.netless.transport.TransportType.WifiDirect) }
+			session.packets().collect { packet ->
+				val response = receiveFrame?.invoke(packet, com.netless.transport.TransportType.WifiDirect)
+					?: receivePacket(packet, com.netless.transport.TransportType).let { null }
+				if (response != null) session.send(response)
+			}
 		} finally {
 			session.close()
 		}
