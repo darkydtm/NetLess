@@ -36,7 +36,7 @@ import com.netless.transport.DiscoveredNode
 @Composable
 fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	val contacts by container.contacts.contacts.collectAsState()
-	val messengerViewModel = remember { MessengerViewModel() }
+	val messengerViewModel = remember(container) { MessengerViewModel(container.conversations) { container.routeDetails() } }
 	LaunchedEffect(container) {
 		container.runtimeController.startDiscovery()
 	}

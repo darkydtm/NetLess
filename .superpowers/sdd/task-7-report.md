@@ -22,3 +22,16 @@
 
 - APK/full Android build was not run, as requested and as unavailable without Gradle.
 - Existing unrelated worktree changes were left untouched and unstaged.
+
+## Task 7 Fixes
+
+- Replaced the standalone remembered messenger ViewModel with an `AppContainer`-backed instance.
+- Connected conversation summaries, message state, read marking, and repository send delivery observation.
+- Added explicit strict-warning dismissal without changing the active policy.
+- Derived expert route labels from current discovered runtime contacts instead of fixed placeholder nodes.
+- Added bounded message/list columns and adaptive NavigationRail versus NavigationBar plus wide list/chat split presentation.
+
+## Verification
+
+- `git diff --check` passed.
+- Gradle tests were not run: this checkout has no Gradle wrapper and system Gradle is unavailable.

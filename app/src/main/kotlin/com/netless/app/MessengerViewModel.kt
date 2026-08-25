@@ -1,13 +1,16 @@
 package com.netless.app
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.netless.protocol.DeliveryState
 import com.netless.transport.TransportPolicy
 import com.netless.transport.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 enum class MessengerTab { Chats, Contacts, Settings }
 
@@ -22,15 +25,25 @@ data class MessengerUiState(
 	val networkPolicy: TransportPolicy = TransportPolicy.Automatic(),
 	val strictWarningVisible: Boolean = false,
 	val routeDetails: List<String>? = null,
+	val messages: List<ChatMessage> = emptyList(),
 )
 
-class MessengerViewModel : ViewModel() {
+class MessengerViewModel(
+	private val repository: ConversationRepository? = null,
+	private val routeProvider: () -> List<String> = { emptyList() },
+) : ViewModel() {
 	private val _uiState = MutableStateFlow(MessengerUiState())
 	val uiState: StateFlow<MessengerUiState> = _uiState.asStateFlow()
 
+	init {
+		repository?.let { repo ->
+			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }) } } }
+		}
+	}
+
 	fun selectTab(tab: MessengerTab) = _uiState.update { it.copy(currentTab = tab) }
 
-	fun selectConversation(id: String) = _uiState.update { it.copy(selectedConversation = id, currentTab = MessengerTab.Chats) }
+	fun selectConversation(id: String) { _uiState.update { it.copy(selectedConversation = id, currentTab = MessengerTab.Chats, messages = repository?.messages(id).orEmpty()) }; repository?.markRead(id) }
 
 	fun draftChanged(text: String) = _uiState.update { it.copy(draft = text) }
 
@@ -46,6 +59,7 @@ class MessengerViewModel : ViewModel() {
 				},
 			)
 		}
+		repository?.let { repo -> viewModelScope.launch { repo.send(conversation, text.trim(), SendPolicy.Automatic).collect(::onDelivery) } }
 	}
 
 	fun setPolicy(policy: TransportPolicy) {
@@ -55,7 +69,9 @@ class MessengerViewModel : ViewModel() {
 
 	fun confirmStrictMode() = _uiState.update { it.copy(networkPolicy = TransportPolicy.Strict(it.networkPolicy.strictTransport ?: TransportType.Bluetooth), strictWarningVisible = false) }
 
-	fun toggleExpertRoute() = _uiState.update { it.copy(routeDetails = if (it.routeDetails == null) listOf("This device", "Nearby peer", "Destination") else null) }
+	fun dismissStrictWarning() = _uiState.update { it.copy(strictWarningVisible = false) }
+
+	fun toggleExpertRoute() = _uiState.update { it.copy(routeDetails = if (it.routeDetails == null) routeProvider() else null) }
 
 	fun onDelivery(state: DeliveryState) = _uiState.update { it.copy(deliveryLabel = when (state) {
 		DeliveryState.Queued -> "Queued"

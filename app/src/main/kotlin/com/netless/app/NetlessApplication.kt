@@ -91,6 +91,8 @@ class AppContainer(application: Application) {
 			)
 		},
 	)
+
+	fun routeDetails(): List<String> = listOf("This device") + contacts.contacts.value.map { it.nodeId.value }
 }
 
 private fun com.netless.transport.WifiDirectDataTransport.asAdapter(identity: com.netless.crypto.PublicKey, sign: suspend (ByteArray) -> com.netless.crypto.Signature, verify: suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean) = object : com.netless.transport.TransportAdapter {
