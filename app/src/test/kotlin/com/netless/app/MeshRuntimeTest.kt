@@ -21,7 +21,8 @@ import com.netless.transport.TransportPolicy
 import com.netless.transport.TransportState
 import com.netless.transport.TransportType
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -232,8 +233,8 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			network.usedTransports += type
 			return object : TransportConnection {
 				override val peerIdentity = network.keys.getValue(peer.value)
-				private var incoming = kotlinx.coroutines.flow.emptyFlow<ByteArray>()
-				override val incomingPackets get() = incoming
+				private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
+				override val incomingPackets = incoming.receiveAsFlow()
 					override suspend fun send(packet: ByteArray) {
 						val forwarded = (ControlCodec.decode(packet) as Forward).packet
 						val envelope = com.netless.protocol.VersionedPacketCodec.decode(forwarded)
@@ -244,7 +245,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 						is Receipt -> when (peer.value) { "destination" -> network.destinationReceipt = decoded.value; "relay" -> { network.relayReceipt = decoded.value; network.originReceipt = decoded.value } }
 						is Acknowledgement -> if (!decoded.value.accepted) network.relayFailureReceipt = DeliveryReceipt(decoded.value.packetId, DeliveryState.Failed, peer, 1_000L)
 					}
-					incoming = kotlinx.coroutines.flow.flowOf(response)
+					incoming.send(response)
 				}
 				override suspend fun close() = Unit
 			}
@@ -305,19 +306,16 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		network.usedTransports += type
 		return object : TransportConnection {
 			override val peerIdentity: PublicKey = network.identityKey
-			override val incomingPackets: kotlinx.coroutines.flow.Flow<ByteArray>
-				get() = incoming
+				override val incomingPackets = incoming.receiveAsFlow()
 				override suspend fun send(packet: ByteArray) {
 				network.forwardedPacket = (ControlCodec.decode(packet) as Forward).packet
 				val forwarded = ControlCodec.decode(packet) as Forward
 				val decoded = com.netless.protocol.VersionedPacketCodec.decode(forwarded.packet)
-				incoming = kotlinx.coroutines.flow.flowOf(
-					ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)),
-					ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, decoded.forwarding.finalNodeId, 0L))
-				)
+				incoming.send(ControlCodec.acknowledgement(HopAcknowledgement(decoded.forwarding.packetId, endpoint.nodeId, true)))
+				incoming.send(ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, decoded.forwarding.finalNodeId, 0L)))
 			}
 			 override suspend fun close() = Unit
-			private var incoming: kotlinx.coroutines.flow.Flow<ByteArray> = emptyFlow()
+				private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
 		 }
 	}
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = true

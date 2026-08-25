@@ -128,7 +128,6 @@ class MeshRuntime(
 				require(decoded.value.timestampEpochMillis <= nowMillis()) { "receipt timestamp is in the future" }
 				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
 				require(stored.state == com.netless.database.RelayState.PENDING && stored.nextHop != null) { "receipt is not admitted" }
-				require(stored.nextHop != null) { "receipt has no pending downstream relay" }
 				val packet = codec.decode(stored.packet, nowMillis())
 				require(packet.forwarding.packetId == decoded.value.packetId) { "receipt packet id does not match packet" }
 				require(decoded.value.nodeId == packet.forwarding.finalNodeId) { "receipt destination does not match packet" }

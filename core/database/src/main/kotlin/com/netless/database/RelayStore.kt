@@ -123,6 +123,7 @@ class RelayStore(
 			val key = key(packetId)
 			val stored = records[key] ?: error("unknown relay packet")
 			val packet = deserialize(databaseKeyStore.unprotect(stored))
+			require(packet.state == RelayState.PENDING) { "relay packet is already terminal" }
 			require(receipt.packetId == packetId) { "receipt packet id does not match" }
 			require(receipt.state == DeliveryState.Delivered) { "receipt is not terminal" }
 			require(packet.finalDestination == null || receipt.nodeId == packet.finalDestination) { "receipt destination does not match" }
