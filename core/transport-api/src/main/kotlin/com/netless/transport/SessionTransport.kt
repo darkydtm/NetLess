@@ -20,6 +20,8 @@ class SessionTransport(private val socket: Socket) {
 	private var negotiatedKey: SecretKey? = null
 	private var authenticatedSessionId: String? = null
 
+	suspend fun close() = socket.close()
+
 	suspend fun establish(protocolVersion: Int, sessionId: String) {
 		require(protocolVersion > 0 && sessionId.isNotBlank()) { "invalid session parameters" }
 		synchronized(output) {

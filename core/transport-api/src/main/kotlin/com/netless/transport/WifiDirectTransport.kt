@@ -4,6 +4,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import com.netless.crypto.PublicKey
+import com.netless.crypto.Signature
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +23,30 @@ class WifiDirectDataTransport : DataTransport {
 		val socket = Socket().apply { connect(InetSocketAddress(endpoint.address, port)) }
 		_state.value = TransportState.Connected
 		return WifiDirectConnection(socket)
+	}
+
+	suspend fun connectAuthenticated(
+		endpoint: TransportEndpoint,
+		protocolVersion: Int,
+		sessionId: String,
+		identityPublicKey: PublicKey,
+		sign: suspend (ByteArray) -> Signature,
+		verify: suspend (PublicKey, ByteArray, Signature) -> Boolean,
+	): TransportConnection {
+		val port = endpoint.metadata["port"]?.toIntOrNull()
+		require(port != null && port in 1..65535) { "Wi-Fi Direct endpoint must contain a valid port" }
+		_state.value = TransportState.Connecting
+		val socket = Socket().apply { connect(InetSocketAddress(endpoint.address, port)) }
+		val session = SessionTransport(socket)
+		session.establishAuthenticated(protocolVersion, sessionId, identityPublicKey, sign, verify)
+		_state.value = TransportState.Connected
+		return SessionConnection(session)
+	}
+
+	private class SessionConnection(private val session: SessionTransport) : TransportConnection {
+		override val incomingPackets: Flow<ByteArray> = session.packets()
+		override suspend fun send(packet: ByteArray) = session.send(packet)
+		override suspend fun close() = session.close()
 	}
 
 	private inner class WifiDirectConnection(private val socket: Socket) : TransportConnection {
