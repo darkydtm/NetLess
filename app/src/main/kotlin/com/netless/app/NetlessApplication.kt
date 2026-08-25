@@ -47,7 +47,7 @@ class AppContainer(application: Application) {
 		javax.crypto.spec.SecretKeySpec(databaseKeyStore.unprotect(wrapped), "AES")
 	}
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher(storageKey))
-	private val contentCipher = ConversationContentCipher(ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } })
+	private val contentCipher = ConversationContentCipher(ConversationKeyRegistry { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }.also { it.register("conversation", storageKey) })
 	lateinit var conversations: ConversationRepository
 	lateinit var meshRuntime: MeshRuntime
 	init {
@@ -84,8 +84,10 @@ class AppContainer(application: Application) {
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				meshRuntime.send(envelope, destination, selected).state
 			}
-			override suspend fun send(conversationId: String, text: String, policy: SendPolicy) = error("Use encrypted message sender")
-	}, contentCipher = contentCipher, verifySignature = { content -> kotlinx.coroutines.runBlocking { identityRepository.verify(localIdentity.publicKey, content.encryptedPayload, com.netless.crypto.Signature(content.senderSignature)) } })
+	}, contentCipher = contentCipher, verifySignature = { content ->
+		val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
+		key != null && kotlinx.coroutines.runBlocking { identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), content.encryptedPayload, com.netless.crypto.Signature(content.senderSignature)) }
+	})
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },

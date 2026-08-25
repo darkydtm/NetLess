@@ -24,11 +24,10 @@ sealed interface SendPolicy {
 	data class Network(val policy: com.netless.transport.TransportPolicy) : SendPolicy
 }
 interface MessageSender {
-	suspend fun send(conversationId: String, text: String, policy: SendPolicy): DeliveryState
-	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState = send(message.conversationId, message.body, policy)
+	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState
 }
 
-class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val contentCipher: ConversationContentCipher = ConversationContentCipher(com.netless.content.ConversationKeyRegistry { _, _, _ -> true }.also { it.register("conversation", javax.crypto.KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) }), private val verifySignature: (ContentEnvelope) -> Boolean = { true }) {
+class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val openOuter: (ByteArray) -> ByteArray = store::open, private val onContent: suspend (ContentEnvelope) -> Unit = {}, private val verifySignature: (ContentEnvelope) -> Boolean) {
 	private val messages = LinkedHashMap<String, ChatMessage>()
 	private val contacts = LinkedHashMap<String, Contact>()
 	private val state = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -51,7 +50,7 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	suspend fun onIncomingContent(content: ContentEnvelope) {
 		runCatching {
 			require(verifySignature(content))
-			val payload = ConversationMessagePayload.decode(content.encryptedPayload)
+			val payload = ConversationMessagePayload.decode(openOuter(content.encryptedPayload))
 			val body = contentCipher.decrypt(payload.sessionId, payload.messageId, payload.conversationId, payload.content).decodeToString()
 			val conversationId = payload.conversationId
 			val messageId = payload.messageId
@@ -61,19 +60,12 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun send(conversationId: String, text: String, policy: SendPolicy): Flow<DeliveryState> = kotlinx.coroutines.flow.flow {
 		require(conversationId.isNotBlank() && text.isNotBlank()); val message = ChatMessage(UUID.randomUUID().toString(), conversationId, text, System.currentTimeMillis(), DeliveryState.Queued); val payload = ConversationMessagePayload(conversationId, message.id, conversationId, contentCipher.encrypt(conversationId, message.id, conversationId, text.encodeToByteArray())); save(message); emitState(message.id, DeliveryState.Queued); emit(DeliveryState.Queued); val result = try { sender.send(message, payload, policy) } catch (error: CancellationException) { throw error } catch (_: Exception) { DeliveryState.Failed }; save(message.copy(deliveryState = result)); emitState(message.id, result); emit(result)
 	}
-	fun encodeContent(conversationId: String, messageId: String, text: String): ByteArray = text.encodeToByteArray()
 	fun addIncoming(message: ChatMessage) = save(message.copy(read = false))
 	private fun save(message: ChatMessage) = synchronized(lock) { messages[message.id] = message; deliveryState.getOrPut(message.id) { MutableStateFlow(message.deliveryState) }.value = message.deliveryState; store.put("conversation-message:${message.id}", encode(message)); publish() }
 	private fun emitState(id: String, state: DeliveryState) { deliveryState.getOrPut(id) { MutableStateFlow(state) }.value = state }
 	private fun publish() { state.value = messages.values.toList(); conversationState.value = messages.values.groupBy { it.conversationId }.map { (id, values) -> values.maxBy { it.timestamp }.let { ConversationSummary(id, contacts[id]?.profileId ?: id, it.body, it.timestamp, values.count { !it.read }, it.deliveryState) } } }
 	private fun encode(m: ChatMessage) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(m.id); writeUTF(m.conversationId); writeUTF(m.body); writeLong(m.timestamp); writeUTF(m.deliveryState.name); writeBoolean(m.read) } }.toByteArray()
-	private fun decode(b: ByteArray): ChatMessage = runCatching {
-		DataInputStream(ByteArrayInputStream(b)).use { input -> ChatMessage(input.readUTF(), input.readUTF(), input.readUTF(), input.readLong(), input.readUTF().let(DeliveryState::valueOf), input.readBoolean()) }
-	}.getOrElse {
-		val parts = String(b, Charsets.UTF_8).split('\u0000', limit = 3)
-		require(parts.size == 3)
-		ChatMessage(parts[0], parts[1], parts[2], 0L, DeliveryState.Delivered)
-	}
+	private fun decode(b: ByteArray): ChatMessage = DataInputStream(ByteArrayInputStream(b)).use { input -> ChatMessage(input.readUTF(), input.readUTF(), input.readUTF(), input.readLong(), input.readUTF().let(DeliveryState::valueOf), input.readBoolean()).also { require(input.available() == 0) } }
 	private fun encode(c: Contact) = ByteArrayOutputStream().also { DataOutputStream(it).apply { writeUTF(c.profileId); writeUTF(c.displayName); writeBoolean(c.endpoint != null); if (c.endpoint != null) writeUTF(c.endpoint) } }.toByteArray()
 	private fun decodeContact(b: ByteArray): Contact { val input = DataInputStream(ByteArrayInputStream(b)); return Contact(input.readUTF(), input.readUTF(), if (input.readBoolean()) input.readUTF() else null) }
 }
