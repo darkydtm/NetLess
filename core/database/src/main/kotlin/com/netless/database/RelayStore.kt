@@ -7,6 +7,14 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.IOException
+
+private const val MAX_PERSISTED_ENTRIES = 10_000
+private const val MAX_PERSISTED_VALUE_BYTES = 2 * 1024 * 1024
+private const val MAX_PACKET_BYTES = 1024 * 1024
+
+private fun defaultRelayStorageFile(): File =
+	File(System.getProperty("user.home", "."), ".netless/relay-store.bin")
 
 enum class RelayState {
 	PENDING,
@@ -27,7 +35,7 @@ class StoredRelayPacket(
 
 class RelayStore(
 	private val databaseKeyStore: DatabaseKeyStore = DatabaseKeyStore(),
-	private val storageFile: File? = null,
+	private val storageFile: File? = defaultRelayStorageFile(),
 	private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
 	private val records = LinkedHashMap<String, ByteArray>()
@@ -41,6 +49,7 @@ class RelayStore(
 	@Synchronized
 	fun put(packet: ByteArray, packetId: PacketId, expiresAtMillis: Long, nextHop: NodeId?) {
 		require(packet.isNotEmpty()) { "packet must not be empty" }
+		require(packet.size <= MAX_PACKET_BYTES) { "packet is too large" }
 		val now = nowMillis()
 		require(expiresAtMillis > now) { "packet must not be expired" }
 
@@ -53,8 +62,17 @@ class RelayStore(
 	}
 
 	@Synchronized
-	fun get(packetId: PacketId): StoredRelayPacket? = records[key(packetId)]?.let {
-		deserialize(databaseKeyStore.unprotect(it))
+	fun get(packetId: PacketId): StoredRelayPacket? {
+		val key = key(packetId)
+		val value = records[key] ?: return null
+		return try {
+			deserialize(databaseKeyStore.unprotect(value))
+		} catch (_: Exception) {
+			records.remove(key)
+			deduplication.remove(key)
+			persist()
+			null
+		}
 	}
 
 	@Synchronized
@@ -66,12 +84,13 @@ class RelayStore(
 	@Synchronized
 	fun expire(nowMillis: Long): Int {
 		val expired = deduplication.filterValues { it <= nowMillis }.keys
+		var removed = 0
 		expired.forEach {
-			records.remove(it)
+			if (records.remove(it) != null) removed++
 			deduplication.remove(it)
 		}
 		if (expired.isNotEmpty()) persist()
-		return expired.size
+		return removed
 	}
 
 	@Synchronized
@@ -82,16 +101,29 @@ class RelayStore(
 	private fun load() {
 		val file = storageFile ?: return
 		if (!file.isFile || file.length() == 0L) return
-		DataInputStream(file.inputStream().buffered()).use { input ->
-				repeat(input.readInt()) {
+		val loadedRecords = LinkedHashMap<String, ByteArray>()
+		val loadedDeduplication = HashMap<String, Long>()
+		try {
+			DataInputStream(file.inputStream().buffered()).use { input ->
+				val count = input.readInt()
+				require(count in 0..MAX_PERSISTED_ENTRIES) { "invalid relay entry count" }
+				repeat(count) {
 					val key = input.readUTF()
-					deduplication[key] = input.readLong()
+					loadedDeduplication[key] = input.readLong()
 					if (input.readBoolean()) {
 						val size = input.readInt()
-						records[key] = ByteArray(size).also(input::readFully)
+						require(size in 0..MAX_PERSISTED_VALUE_BYTES) { "invalid relay value size" }
+						loadedRecords[key] = ByteArray(size).also(input::readFully)
 					}
+				}
 			}
+		} catch (_: IOException) {
+			return
+		} catch (_: IllegalArgumentException) {
+			return
 		}
+		records.putAll(loadedRecords)
+		deduplication.putAll(loadedDeduplication)
 	}
 
 	private fun persist() {
@@ -131,7 +163,9 @@ class RelayStore(
 		val packetId = PacketId(input.readUTF())
 		val expiresAtMillis = input.readLong()
 		val nextHop = if (input.readBoolean()) NodeId(input.readUTF()) else null
-		val packet = ByteArray(input.readInt()).also(input::readFully)
+		val size = input.readInt()
+		require(size in 1..MAX_PACKET_BYTES) { "invalid packet size" }
+		val packet = ByteArray(size).also(input::readFully)
 		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, RelayState.PENDING)
 	}
 }
