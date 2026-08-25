@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collect
 import java.util.UUID
 import java.security.MessageDigest
+import com.netless.crypto.PublicKey
+import com.netless.crypto.Signature
 
 class MeshRuntime(
 	private val localNode: NodeId,
@@ -28,7 +30,8 @@ class MeshRuntime(
 	private val relayStore: RelayStore? = null,
 	private val codec: VersionedPacketCodecContract = VersionedPacketCodec,
 	private val nowMillis: () -> Long = System::currentTimeMillis,
-	private val verifySenderSignature: (ContentEnvelope) -> Boolean = { true },
+	private val signPacket: suspend (PacketEnvelope) -> ByteArray = { byteArrayOf() },
+	private val verifySenderSignature: suspend (ContentEnvelope) -> Boolean = { false },
 ) {
 	private val deliveries = MutableSharedFlow<DeliveryReceipt>(extraBufferCapacity = 16)
 
@@ -36,10 +39,17 @@ class MeshRuntime(
 		val now = nowMillis()
 		val packetId = PacketId(UUID.randomUUID().toString())
 		val selected = route(destination, policy) ?: return receipt(packetId, DeliveryState.Failed)
-		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, selected.hops.first().nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(1)), content, createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
-		val integrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(unsigned, now))
-		val bytes = codec.encode(unsigned.copy(forwarding = unsigned.forwarding.copy(perHopIntegrity = integrity)), now)
-		return forward(bytes, packetId, selected.hops.first())
+		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, selected.hops.firstOrNull()?.nextNodeId, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0)), content.copy(senderSignature = byteArrayOf(0)), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
+		val signature = signPacket(unsigned)
+		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed)
+		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
+		val integrityInput = signed.copy(
+			forwarding = signed.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+			content = signed.content.copy(senderSignature = byteArrayOf(0)),
+		)
+		val bytes = codec.encode(signed.copy(forwarding = signed.forwarding.copy(perHopIntegrity = MessageDigest.getInstance("SHA-256").digest(codec.encode(integrityInput, now)))), now)
+		relayStore?.put(bytes, packetId, selected.expiresAtMillis, selected.hops.firstOrNull()?.nextNodeId)
+		return forward(bytes, packetId, selected.hops.firstOrNull())
 	}
 
 	suspend fun receive(bytes: ByteArray, ingress: TransportType): DeliveryReceipt {
@@ -68,7 +78,8 @@ class MeshRuntime(
 	fun observeDelivery(packetId: PacketId): Flow<DeliveryReceipt> = deliveries.asSharedFlow()
 		.let { flow -> kotlinx.coroutines.flow.flow { flow.collect { if (it.packetId == packetId) emit(it) } } }
 
-	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop): DeliveryReceipt {
+	private suspend fun forward(bytes: ByteArray, packetId: PacketId, hop: com.netless.network.RouteHop?): DeliveryReceipt {
+		if (hop == null) return receipt(packetId, DeliveryState.Delivered).also(deliveries::tryEmit)
 		val adapter = transports.adapter(hop.transport)
 			?: return receipt(packetId, DeliveryState.Failed)
 			try {
@@ -78,7 +89,6 @@ class MeshRuntime(
 			} catch (error: Exception) {
 				return receipt(packetId, DeliveryState.Failed)
 			}
-		relayStore?.markDelivered(packetId)
 		val result = receipt(packetId, DeliveryState.Relaying)
 		deliveries.tryEmit(result)
 		return result
@@ -86,8 +96,11 @@ class MeshRuntime(
 
 	private fun validIntegrity(packet: PacketEnvelope, bytes: ByteArray): Boolean {
 		val supplied = packet.forwarding.perHopIntegrity
-		val blank = packet.forwarding.copy(perHopIntegrity = byteArrayOf(1))
-		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(packet.copy(forwarding = blank), nowMillis()))
+		val blank = packet.copy(
+			forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
+			content = packet.content.copy(senderSignature = byteArrayOf(0)),
+		)
+		val expected = MessageDigest.getInstance("SHA-256").digest(codec.encode(blank, packet.createdAtEpochMillis))
 		return supplied.contentEquals(expected)
 	}
 

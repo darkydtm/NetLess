@@ -14,6 +14,11 @@ import com.netless.transport.DiscoveryCapability
 import com.netless.transport.TransportType
 import java.util.UUID
 import com.netless.database.RelayStore
+import com.netless.network.RouteGraph
+import com.netless.network.RouteEngine
+import com.netless.network.RouteHop
+import com.netless.network.RouteMetrics
+import com.netless.transport.TransportPolicy
 
 class NetlessApplication : Application() {
 	lateinit var container: AppContainer
@@ -32,10 +37,27 @@ class AppContainer(application: Application) {
 	val wifiDirectDiscovery: DiscoveryTransport = WifiDirectDiscoveryTransport(application)
 	val wifiDirect = com.netless.transport.WifiDirectDataTransport()
 	val transportRegistry = TransportRegistry().also { it.register(wifiDirect.asAdapter()) }
-	val meshRuntime = MeshRuntime(identityRepository.getOrCreateIdentityBlocking().profileId.let { com.netless.common.NodeId(it.value) }, transportRegistry, { _, _ -> null }, RelayStore(storageFile = java.io.File(application.filesDir, "relay.db")))
+	private val localIdentity = identityRepository.getOrCreateIdentityBlocking()
+	val meshRuntime = MeshRuntime(
+		com.netless.common.NodeId(localIdentity.profileId.value), transportRegistry,
+		{ destination, policy ->
+			val hops = contacts.contacts.value.flatMap { node ->
+				transportRegistry.availableAdapters().filter { adapter -> adapter.type.name == node.endpoint.metadata["transport"] || node.endpoint.metadata["transport"] == null }.map {
+					RouteHop(com.netless.common.NodeId(localIdentity.profileId.value), node.nodeId, it.type, node.endpoint, RouteMetrics(1.0, 1.0, 1.0, 1.0), Long.MAX_VALUE)
+				}
+			}
+			RouteEngine().select(destination, RouteGraph(hops), policy, System.currentTimeMillis())
+		},
+		RelayStore(storageFile = java.io.File(application.filesDir, "relay.db")),
+		signPacket = { packet -> identityRepository.sign(packet.content.encryptedPayload + packet.content.eventId.encodeToByteArray()).bytes },
+		verifySenderSignature = { content ->
+			val key = contacts.contacts.value.firstOrNull { it.nodeId.value == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
+			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), content.encryptedPayload + content.eventId.encodeToByteArray(), com.netless.crypto.Signature(content.senderSignature))
+		},
+	)
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher())
 	val messages = MessageRepository(contentStore)
-	val peerMessages = PeerMessageRuntime(identityRepository, messages, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport)
+	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport)
 	val audioRuntime = AudioRuntime()
 	val runtimeController = RuntimeController(
 		CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
