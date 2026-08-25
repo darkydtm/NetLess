@@ -45,6 +45,7 @@ class MeshRuntimeTest {
 		assertEquals(DeliveryReceipt(result.packetId, DeliveryState.Delivered, network.destinationId, 1_000L), network.destinationReceipt)
 		assertEquals(network.destinationReceipt, network.relayReceipt)
 		assertEquals(network.destinationReceipt, network.originReceipt)
+		assertTrue(network.destinationStore.contains(result.packetId))
 		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
 		assertTrue(!network.originStore.contains(result.packetId))
 		assertTrue(!network.relayStore.contains(result.packetId))
@@ -64,6 +65,7 @@ class MeshRuntimeTest {
 		assertEquals(1, network.contentDeliveries)
 		assertEquals(result.packetId, network.destinationReceipt?.packetId)
 		assertEquals(network.destinationId, network.destinationReceipt?.nodeId)
+		assertTrue(network.destinationStore.contains(result.packetId))
 	}
 
 	@Test
@@ -160,6 +162,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	val usedTransports = mutableListOf<TransportType>()
 	val originStore = RelayStore()
 	val relayStore = RelayStore()
+	val destinationStore = RelayStore()
 	var received: ContentEnvelope? = null
 	var contentDeliveries = 0
 	var destinationPacket: ByteArray? = null
@@ -186,7 +189,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 		)
 		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
 		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
-		destination = runtime(destinationId, null, emptyList()) { if (failDestination) error("destination rejected content") else { received = it; contentDeliveries++ } }
+		destination = runtime(destinationId, destinationStore, emptyList()) { if (failDestination) error("destination rejected content") else { received = it; contentDeliveries++ } }
 	}
 
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)

@@ -114,6 +114,14 @@ Verification: Gradle tests remain unavailable because this checkout has no Gradl
 
 Verification: `git diff --check` passed. Kotlin tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
 
+## Latest Task 5 review blockers
+
+- MeshRuntime now checks persisted terminal receipts before generic duplicate handling, so destination retries replay the same receipt without handing content off twice.
+- RelayStore persists terminal receipt metadata and retains packet state until upstream propagation is accepted; only then is the local record deleted.
+- Three-node tests assert destination replay and retained destination state after propagation.
+
+Verification: `git diff --check` passed. Gradle tests were not runnable because this checkout has no Gradle wrapper or system Gradle executable.
+
 ## Latest Task 5 forwarding audit fix
 
 - Origin packets now address the first route hop as `currentNodeId`; `nextHop` is the following hop or final destination.

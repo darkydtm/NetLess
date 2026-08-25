@@ -79,22 +79,25 @@ class MeshRuntime(
 			if (packetId != null) emit(receipt(packetId, DeliveryState.Failed))
 			throw error
 		}
+		relayStore?.get(packet.forwarding.packetId)?.terminalReceipt?.let { return it.also(::emit) }
+		if (terminalReceipts[packet.forwarding.packetId] != null) {
+			return terminalReceipts.getValue(packet.forwarding.packetId).also(::emit)
+		}
 		if (relayStore?.contains(packet.forwarding.packetId) == true) {
 			return receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
 		}
 		relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, packet.forwarding.nextHop)
-		terminalReceipts[packet.forwarding.packetId]?.let { return it.also(::emit) }
 		if (packet.forwarding.finalNodeId == localNode) {
 			val result = try {
 				onContent(packet.content)
 				relayStore?.put(bytes, packet.forwarding.packetId, packet.expiresAtEpochMillis, null)
-				relayStore?.markDelivered(packet.forwarding.packetId)
 				DeliveryReceipt(packet.forwarding.packetId, DeliveryState.Delivered, packet.forwarding.finalNodeId, now)
 			} catch (error: Exception) {
 				receipt(packet.forwarding.packetId, DeliveryState.Failed)
 			}
 			emit(result)
 			if (result.state == DeliveryState.Delivered) terminalReceipts[result.packetId] = result
+			if (result.state == DeliveryState.Delivered) relayStore?.markTerminal(result.packetId, result)
 			return result
 		}
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
@@ -126,7 +129,7 @@ class MeshRuntime(
 				require(decoded.value.nodeId == packet.forwarding.finalNodeId) { "receipt destination does not match packet" }
 				val result = decoded.value
 				terminalReceipts[result.packetId] = result
-				relayStore?.markDelivered(result.packetId)
+				relayStore?.markTerminal(result.packetId, result)
 				emit(result)
 				ControlCodec.receipt(result)
 			}
@@ -159,19 +162,19 @@ class MeshRuntime(
 					require(response.value.state == DeliveryState.Delivered)
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					propagatedReceipt = response.value
-					relayStore?.markDelivered(packetId)
+					relayStore?.markTerminal(packetId, response.value)
 				}
 				is Acknowledgement -> {
 					require(response.value.packetId == packetId && response.value.nodeId == hop.nextNodeId && response.value.accepted)
 					if (response.value.finalDelivery) {
 						require(hop.nextNodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "terminal acknowledgement from non-final hop" }
 						propagatedReceipt = DeliveryReceipt(packetId, DeliveryState.Delivered, hop.nextNodeId, now)
-						relayStore?.markDelivered(packetId)
+						relayStore?.markTerminal(packetId, propagatedReceipt!!)
 					} else {
 						val receipt = ControlCodec.decode(connection.incomingPackets.first())
 						require(receipt is Receipt && receipt.value.packetId == packetId && receipt.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && receipt.value.state == DeliveryState.Delivered)
 						propagatedReceipt = receipt.value
-						relayStore?.markDelivered(packetId)
+						relayStore?.markTerminal(packetId, propagatedReceipt!!)
 					}
 				}
 				else -> error("unexpected control response")
@@ -183,6 +186,7 @@ class MeshRuntime(
 			}
 		val result = propagatedReceipt ?: receipt(packetId, DeliveryState.Relaying)
 		if (result.state == DeliveryState.Delivered) terminalReceipts[packetId] = result
+		if (result.state == DeliveryState.Delivered) relayStore?.markDelivered(packetId)
 		emit(result)
 		return result
 	}

@@ -2,6 +2,8 @@ package com.netless.database
 
 import com.netless.common.NodeId
 import com.netless.common.PacketId
+import com.netless.protocol.DeliveryReceipt
+import com.netless.protocol.DeliveryState
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
@@ -19,6 +21,7 @@ private const val MAX_PACKET_BYTES = 1024 * 1024
 
 enum class RelayState {
 	PENDING,
+	TERMINAL,
 }
 
 class StoredRelayPacket(
@@ -27,6 +30,7 @@ class StoredRelayPacket(
 	val expiresAtMillis: Long,
 	val nextHop: NodeId?,
 	val state: RelayState,
+	val terminalReceipt: DeliveryReceipt? = null,
 ) {
 	private val packetValue = packet.copyOf()
 
@@ -104,6 +108,18 @@ class RelayStore(
 		load()
 		prune(nowMillis())
 		deduplication.containsKey(key(packetId))
+	}
+
+	@Synchronized
+	fun markTerminal(packetId: PacketId, receipt: DeliveryReceipt) {
+		withFileLock {
+			load()
+			val key = key(packetId)
+			val stored = records[key] ?: return@withFileLock
+			val packet = deserialize(databaseKeyStore.unprotect(stored))
+			records[key] = databaseKeyStore.protect(serialize(packet.packetId, packet.packet, packet.expiresAtMillis, packet.nextHop, receipt))
+			persist()
+		}
 	}
 
 	@Synchronized
@@ -225,13 +241,19 @@ class RelayStore(
 		}
 	}
 
-	private fun serialize(packetId: PacketId, packet: ByteArray, expiresAtMillis: Long, nextHop: NodeId?): ByteArray =
+	private fun serialize(packetId: PacketId, packet: ByteArray, expiresAtMillis: Long, nextHop: NodeId?, receipt: DeliveryReceipt? = null): ByteArray =
 		ByteArrayOutputStream().use { bytes ->
 			DataOutputStream(bytes).use { output ->
 				output.writeUTF(packetId.value)
 				output.writeLong(expiresAtMillis)
 				output.writeBoolean(nextHop != null)
 				if (nextHop != null) output.writeUTF(nextHop.value)
+				output.writeBoolean(receipt != null)
+				if (receipt != null) {
+					output.writeUTF(receipt.state.name)
+					output.writeUTF(receipt.nodeId.value)
+					output.writeLong(receipt.timestampEpochMillis)
+				}
 				output.writeInt(packet.size)
 				output.write(packet)
 			}
@@ -242,9 +264,10 @@ class RelayStore(
 		val packetId = PacketId(input.readUTF())
 		val expiresAtMillis = input.readLong()
 		val nextHop = if (input.readBoolean()) NodeId(input.readUTF()) else null
+		val receipt = if (input.readBoolean()) DeliveryReceipt(packetId, DeliveryState.valueOf(input.readUTF()), NodeId(input.readUTF()), input.readLong()) else null
 		val size = input.readInt()
 		require(size in 1..MAX_PACKET_BYTES) { "invalid packet size" }
 		val packet = ByteArray(size).also(input::readFully)
-		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, RelayState.PENDING)
+		StoredRelayPacket(packetId, packet, expiresAtMillis, nextHop, if (receipt == null) RelayState.PENDING else RelayState.TERMINAL, receipt)
 	}
 }
