@@ -161,11 +161,11 @@ class MeshRuntimeTest {
 	fun `relay rewrite preserves integrity for destination validation`() = runTest {
 		val network = FakeNetwork()
 		val packet = com.netless.protocol.PacketEnvelope(
-			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("destination"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("relay")),
+			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("destination"), 0, 2, TrafficClass.Reliable, ByteArray(1), NodeId("relay")),
 			content().copy(senderSignature = byteArrayOf(9)), createdAtEpochMillis = 100, expiresAtEpochMillis = Long.MAX_VALUE,
 		)
 		val now = 1000L
-		val input = packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = ByteArray(32)), content = packet.content.copy(senderSignature = ByteArray(32)))
+		val input = packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = ByteArray(1)), content = packet.content.copy(senderSignature = ByteArray(1)))
 		val bytes = com.netless.protocol.VersionedPacketCodec.encode(packet.copy(forwarding = packet.forwarding.copy(perHopIntegrity = MessageDigest.getInstance("SHA-256").digest(com.netless.protocol.VersionedPacketCodec.encode(input, now)))))
 
 		network.runtime(NodeId("relay"), now).receive(bytes, TransportType.Bluetooth)
@@ -173,7 +173,7 @@ class MeshRuntimeTest {
 		assertEquals(DeliveryState.Delivered, destination.receive(network.forwardedPacket!!, TransportType.WifiDirect).state)
 	}
 
-	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
+	private fun content() = ContentEnvelope("event", ProfileId("origin"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 }
 
 private class ThreeNodeNetwork(failDestination: Boolean = false) {
@@ -306,7 +306,7 @@ private class FakeNetwork {
 
 	val packetId = com.netless.common.PacketId("packet")
 	fun packet() = com.netless.protocol.VersionedPacketCodec.encode(com.netless.protocol.PacketEnvelope(
-		com.netless.protocol.ForwardingEnvelope(packetId, NodeId("destination"), NodeId("local"), 0, 1, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
+		com.netless.protocol.ForwardingEnvelope(packetId, NodeId("destination"), NodeId("local"), 0, 1, TrafficClass.Reliable, ByteArray(1), NodeId("local")),
 		content().copy(senderSignature = byteArrayOf(1)), createdAtEpochMillis = 0, expiresAtEpochMillis = Long.MAX_VALUE
 	))
 
@@ -315,7 +315,7 @@ private class FakeNetwork {
 		"identityKey" to Base64.getEncoder().encodeToString(identityKey.encoded),
 		"sessionId" to "${type.name}:$node",
 	))
-	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
+	private fun content() = ContentEnvelope("event", ProfileId("origin"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 	private fun metrics() = RouteMetrics(1.0, 1.0, 1.0, 1.0)
 }
 
