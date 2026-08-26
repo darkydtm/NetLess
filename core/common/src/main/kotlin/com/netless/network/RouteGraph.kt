@@ -18,7 +18,9 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 			val roots = component.filter { it !in incoming }
 			(if (roots.isEmpty() && maxHops == 1) emptySet() else if (roots.isEmpty()) component else roots).sortedBy { it.value }
 		}.sortedBy { it.value }
+		val componentExpiry = activeHops.minOfOrNull { it.expiresAtMillis } ?: Long.MAX_VALUE
 		return starts.flatMap { start -> routesFrom(start, destination, nowMillis) }
+			.map { it.copy(expiresAtMillis = minOf(it.expiresAtMillis, componentExpiry)) }
 	}
 
 	val hopLimit: Int
@@ -73,7 +75,7 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 				bandwidth = hops.minOfOrNull { it.metrics.bandwidth } ?: 0.0,
 				latency = hops.sumOf { it.metrics.latency },
 				energyCost = hops.sumOf { it.metrics.energyCost },
-				availability = hops.fold(1.0) { total, hop -> total * hop.metrics.availability },
+				availability = (hops.fold(1.0) { total, hop -> total * hop.metrics.availability } * 100).toInt() / 100.0,
 			)
 			return Route(nodes, metrics, hops.minOfOrNull { it.expiresAtMillis } ?: Long.MAX_VALUE, hops)
 		}
