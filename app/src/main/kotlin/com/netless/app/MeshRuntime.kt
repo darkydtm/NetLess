@@ -130,6 +130,7 @@ class MeshRuntime(
 			is Receipt -> {
 				require(decoded.value.state == DeliveryState.Delivered || decoded.value.state == DeliveryState.Failed) { "non-terminal receipt" }
 				require(decoded.value.timestampEpochMillis <= nowMillis()) { "receipt timestamp is in the future" }
+				require(terminalReceipts[decoded.value.packetId] == null) { "receipt is already terminal" }
 				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
 				require(stored.state == com.netless.database.RelayState.PENDING && stored.nextHop != null) { "receipt is not admitted" }
 				val packet = codec.decode(stored.packet, nowMillis())
