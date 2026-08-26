@@ -218,7 +218,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 		destination = MeshRuntime(
 			destinationId,
 			TransportRegistry(),
-			suspend { error("destination has no outbound route") },
+			{ _, _ -> error("destination has no outbound route") },
 			relayStore = destinationStore,
 			signPacket = { sign(keys.getValue(destinationId.value), it) },
 			verifySenderSignature = { packet, data -> keys[packet.content.senderProfileId.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true },
