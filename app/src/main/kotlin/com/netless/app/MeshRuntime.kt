@@ -48,7 +48,6 @@ class MeshRuntime(
 ) {
 	private val deliveries = mutableMapOf<PacketId, MutableStateFlow<DeliveryReceipt?>>()
 	private val terminalReceipts = mutableMapOf<PacketId, DeliveryReceipt>()
-	private val receiptIngress = mutableMapOf<PacketId, TransportType>()
 	private val deliveryLock = Any()
 
 	suspend fun send(content: ContentEnvelope, destination: NodeId, policy: TransportPolicy): DeliveryReceipt {
@@ -130,7 +129,6 @@ class MeshRuntime(
 			is Acknowledgement -> frame
 			is Receipt -> {
 				require(decoded.value.state == DeliveryState.Delivered || decoded.value.state == DeliveryState.Failed) { "non-terminal receipt" }
-				receiptIngress[decoded.value.packetId]?.let { expected -> require(expected == ingress) { "receipt ingress does not match delivery route" } }
 				require(decoded.value.timestampEpochMillis <= nowMillis()) { "receipt timestamp is in the future" }
 				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
 				require(stored.state == com.netless.database.RelayState.PENDING && stored.nextHop != null) { "receipt is not admitted" }
@@ -166,7 +164,6 @@ class MeshRuntime(
 				coroutineScope {
 					val incoming = Channel<ByteArray>(Channel.UNLIMITED)
 					val collector = launch { connection.incomingPackets.collect { incoming.send(it) } }
-					receiptIngress[packetId] = hop.transport
 					connection.send(ControlCodec.forward(bytes))
 					when (val response = ControlCodec.decode(incoming.receive())) {
 				is Receipt -> {
