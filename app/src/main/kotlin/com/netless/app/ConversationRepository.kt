@@ -57,7 +57,7 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 		val canonicalIdentityKey = IdentityKeyCodec.canonicalize(identityKey)
 		require(canonicalIdentityKey != null) { "identityKey must be a valid Base64-encoded public key" }
 		val contact = Contact(profileId, displayName, nodeId, endpoint, canonicalIdentityKey!!)
-		contactStore.upsert(com.netless.common.ProfileId(profileId), displayName, com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, emptyMap()), canonicalIdentityKey!!)
+		contactStore.upsert(com.netless.common.ProfileId(profileId), displayName, com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, mapOf("sessionId" to endpoint)), canonicalIdentityKey!!)
 		publish()
 	}
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
