@@ -59,6 +59,7 @@ class MeshRuntimeTest {
 		assertEquals(NodeId("destination"), network.forwarding.last().first)
 		assertEquals(null, network.forwarding.last().second)
 		} catch (error: Throwable) {
+			println(error.stackTraceToString())
 			throw AssertionError(error.stackTraceToString(), error)
 		}
 	}
@@ -84,6 +85,7 @@ class MeshRuntimeTest {
 		assertTrue(!network.originStore.contains(result.packetId))
 		assertTrue(!network.relayStore.contains(result.packetId))
 		} catch (error: Throwable) {
+			println(error.stackTraceToString())
 			throw AssertionError(error.stackTraceToString(), error)
 		}
 	}
