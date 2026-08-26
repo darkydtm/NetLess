@@ -245,7 +245,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			require(request.protocolVersion == 1)
 			val challenge = network.sessionChallenge(request.sessionId, request.expectedPeerIdentity)
 				val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
-			require(request.verify(request.expectedPeerIdentity, challenge, signature)) { "forged session rejected" }
+			require(request.verify(network.keys.getValue(local.value), challenge, signature)) { "forged session rejected" }
 			network.usedTransports += type
 			return object : TransportConnection {
 				override val peerIdentity = network.keys.getValue(peer.value)
