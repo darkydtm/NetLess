@@ -62,7 +62,7 @@ class DurableEncryptedContentStore(
 	private fun load() {
 		if (!file.isFile) return
 		file.readLines().forEach { line ->
-			val separator = line.indexOf(':')
+			val separator = line.lastIndexOf(':')
 			if (separator > 0) records[line.substring(0, separator)] = java.util.Base64.getDecoder().decode(line.substring(separator + 1))
 		}
 	}

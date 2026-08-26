@@ -179,8 +179,8 @@ class MeshRuntimeTest {
 private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	val destinationId = NodeId("destination")
 	val usedTransports = mutableListOf<TransportType>()
-	val originStore = RelayStore()
-	val relayStore = RelayStore()
+	val originStore = testRelayStore()
+	val relayStore = testRelayStore()
 	private val destinationFile = File.createTempFile("mesh-destination", ".bin").also { it.delete() }
 	private val keyStore = com.netless.database.DatabaseKeyStore(TestKeyWrapper)
 	var destinationStore = RelayStore(keyStore, destinationFile, nowMillis = { 1_000L })
@@ -275,7 +275,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 private class FakeNetwork {
 	val usedTransports = mutableListOf<TransportType>()
 	val disabled = mutableSetOf<TransportType>()
-	val relayStore = RelayStore()
+	val relayStore = testRelayStore()
 	val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
 	var forwardedPacket: ByteArray? = null
@@ -353,3 +353,5 @@ private object TestKeyWrapper : KeyWrapper {
 	override fun wrap(key: ByteArray) = key.copyOf()
 	override fun unwrap(wrappedKey: ByteArray) = wrappedKey.copyOf()
 }
+
+private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper))
