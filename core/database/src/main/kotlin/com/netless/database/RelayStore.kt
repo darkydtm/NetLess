@@ -137,7 +137,9 @@ class RelayStore(
 	fun markDelivered(packetId: PacketId) {
 		withFileLock {
 			load()
-			records.remove(key(packetId))
+			val key = key(packetId)
+			records.remove(key)
+			deduplication.remove(key)
 			persist()
 		}
 	}
