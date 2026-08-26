@@ -140,9 +140,9 @@ class MeshRuntimeTest {
 		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("attacker"), 0L)), TransportType.Bluetooth) }.isFailure)
 		assertTrue(network.relayStore.contains(network.packetId))
 
-		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("local"), 0L)), TransportType.Bluetooth)
+		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth)
 		assertTrue(!network.relayStore.contains(network.packetId))
-		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("local"), 0L)), TransportType.Bluetooth) }.isFailure)
+		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth) }.isFailure)
 	}
 
 	@Test
@@ -161,7 +161,7 @@ class MeshRuntimeTest {
 	fun `relay rewrite preserves integrity for destination validation`() = runTest {
 		val network = FakeNetwork()
 		val packet = com.netless.protocol.PacketEnvelope(
-			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("relay"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
+			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("destination"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("relay")),
 			content().copy(senderSignature = byteArrayOf(9)), createdAtEpochMillis = 100, expiresAtEpochMillis = Long.MAX_VALUE,
 		)
 		val now = 1000L
