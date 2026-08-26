@@ -90,6 +90,7 @@ class MeshRuntime(
 			return terminalReceipts.getValue(packet.forwarding.packetId).also(::emit)
 		}
 		val pending = relayStore?.get(packet.forwarding.packetId)
+		receiptIngress.putIfAbsent(packet.forwarding.packetId, ingress)
 		if (pending?.state == com.netless.database.RelayState.PENDING) {
 			val retryHop = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())?.hops?.firstOrNull()
 			return if (retryHop != null) forward(pending.packet, packet.forwarding.packetId, retryHop, now) else receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
@@ -130,7 +131,7 @@ class MeshRuntime(
 			is Acknowledgement -> frame
 			is Receipt -> {
 				require(decoded.value.state == DeliveryState.Delivered || decoded.value.state == DeliveryState.Failed) { "non-terminal receipt" }
-				require(receiptIngress[decoded.value.packetId] == ingress) { "receipt ingress does not match delivery route" }
+				receiptIngress[decoded.value.packetId]?.let { expected -> require(expected == ingress) { "receipt ingress does not match delivery route" } }
 				require(decoded.value.timestampEpochMillis <= nowMillis()) { "receipt timestamp is in the future" }
 				val stored = relayStore?.get(decoded.value.packetId) ?: error("receipt is not admitted")
 				require(stored.state == com.netless.database.RelayState.PENDING && stored.nextHop != null) { "receipt is not admitted" }
