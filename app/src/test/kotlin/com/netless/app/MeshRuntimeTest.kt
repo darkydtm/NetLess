@@ -364,4 +364,4 @@ private object TestKeyWrapper : KeyWrapper {
 	override fun unwrap(wrappedKey: ByteArray) = wrappedKey.copyOf()
 }
 
-private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper), nowMillis = { 0L })
+private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper), nowMillis = { 1_000L })

@@ -127,7 +127,7 @@ class RelayStore(
 			require(receipt.packetId == packetId) { "receipt packet id does not match" }
 			require(receipt.state == DeliveryState.Delivered) { "receipt is not terminal" }
 			require(packet.finalDestination == null || receipt.nodeId == packet.finalDestination) { "receipt destination does not match" }
-			require(receipt.timestampEpochMillis <= nowMillis() && receipt.timestampEpochMillis <= packet.expiresAtMillis) { "receipt timestamp is invalid" }
+			require(receipt.timestampEpochMillis <= nowMillis() && receipt.timestampEpochMillis < packet.expiresAtMillis) { "receipt timestamp is invalid" }
 			records[key] = databaseKeyStore.protect(serialize(packet.packetId, packet.packet, packet.expiresAtMillis, packet.nextHop, packet.finalDestination, receipt))
 			persist()
 		}
