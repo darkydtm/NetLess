@@ -46,9 +46,8 @@ class MeshRuntimeTest {
 		assertEquals(DeliveryState.Delivered, result.state)
 		assertEquals(content, network.received)
 		assertEquals(DeliveryReceipt(result.packetId, DeliveryState.Delivered, network.destinationId, 1_000L), network.destinationReceipt)
-		assertEquals(result, network.destinationReceipt)
-		assertEquals(result, network.relayReceipt)
-		assertEquals(result, network.originReceipt)
+		assertEquals(network.destinationReceipt, network.relayReceipt)
+		assertEquals(network.destinationReceipt, network.originReceipt)
 		assertTrue(!network.destinationStore.hasPending(result.packetId))
 		assertTrue(network.destinationStore.contains(result.packetId))
 		assertEquals(listOf(TransportType.Bluetooth, TransportType.WifiDirect), network.usedTransports)
@@ -69,8 +68,7 @@ class MeshRuntimeTest {
 
 		network.restartDestination()
 
-		val replay = network.destination.receive(packet, TransportType.WifiDirect)
-		assertEquals(receipt, replay)
+		assertEquals(receipt, network.destination.receive(packet, TransportType.WifiDirect))
 		assertEquals(1, network.contentDeliveries)
 		assertEquals(receipt, network.destinationReceipt)
 		assertEquals(result.packetId, receipt?.packetId)
