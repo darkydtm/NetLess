@@ -203,7 +203,6 @@ class MeshRuntime(
 				}
 				connection.close()
 			} catch (error: Exception) {
-				println("mesh forward failed: ${error.stackTraceToString()}")
 				try { adapter.fail() } catch (_: Exception) { }
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}

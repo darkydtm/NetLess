@@ -39,7 +39,6 @@ import java.io.File
 class MeshRuntimeTest {
 	@Test
 	fun `delivers through three real runtimes with mixed authenticated hops`() = runTest {
-		try {
 		val network = ThreeNodeNetwork()
 		val content = content()
 		val result = network.origin.send(content, network.destinationId, TransportPolicy.Automatic())
@@ -58,15 +57,10 @@ class MeshRuntimeTest {
 		assertEquals(NodeId("destination"), network.forwarding.first().second)
 		assertEquals(NodeId("destination"), network.forwarding.last().first)
 		assertEquals(null, network.forwarding.last().second)
-		} catch (error: Throwable) {
-			println(error.stackTraceToString())
-			throw AssertionError(error.stackTraceToString(), error)
-		}
 	}
 
 	@Test
 	fun `duplicate packet replays terminal receipt without handing off content twice`() = runTest {
-		try {
 		val network = ThreeNodeNetwork()
 		val result = network.origin.send(content(), network.destinationId, TransportPolicy.Automatic())
 		val packet = network.destinationPacket!!
@@ -84,10 +78,6 @@ class MeshRuntimeTest {
 		assertTrue(network.destinationStore.contains(result.packetId))
 		assertTrue(!network.originStore.contains(result.packetId))
 		assertTrue(!network.relayStore.contains(result.packetId))
-		} catch (error: Throwable) {
-			println(error.stackTraceToString())
-			throw AssertionError(error.stackTraceToString(), error)
-		}
 	}
 
 	@Test
