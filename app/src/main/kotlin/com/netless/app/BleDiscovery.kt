@@ -80,6 +80,9 @@ class ContactStore(private val store: com.netless.content.DurableEncryptedConten
 
 	@Synchronized
 	fun upsert(node: DiscoveredNode) {
+		node.endpoint.metadata["identityKey"]?.let { key ->
+			require(IdentityKeyCodec.canonicalize(key) != null) { "identityKey must be a valid Base64-encoded public key" }
+		}
 		contactsByNode[node.nodeId] = node
 		val metadata = node.endpoint.metadata + ("nodeId" to node.nodeId.value) + ("endpointAddress" to node.endpoint.address)
 		store?.put("discovered-contact:${node.nodeId.value}", BleAdvertisementCodec.encode(DiscoveryAdvertisement(node.nodeId.value, 1, metadata["sessionId"] ?: node.nodeId.value, emptySet(), emptySet(), metadata)))
@@ -88,9 +91,11 @@ class ContactStore(private val store: com.netless.content.DurableEncryptedConten
 
 	fun upsert(profileId: com.netless.common.ProfileId, nodeId: NodeId, endpoint: TransportEndpoint, identityKey: String? = null) {
 		require(endpoint.nodeId == nodeId)
+		val canonicalIdentityKey = identityKey?.let { IdentityKeyCodec.canonicalize(it) }
+		require(identityKey == null || canonicalIdentityKey != null) { "identityKey must be a valid Base64-encoded public key" }
 		val metadata = endpoint.metadata.toMutableMap().apply {
 			put("profileId", profileId.value)
-			identityKey?.takeIf { it.isNotBlank() }?.let { put("identityKey", it) }
+			canonicalIdentityKey?.let { put("identityKey", it) }
 		}
 		upsert(DiscoveredNode(nodeId, TransportEndpoint(nodeId, endpoint.address, metadata), TransportCapabilities(true, true, 1, true, true)))
 	}

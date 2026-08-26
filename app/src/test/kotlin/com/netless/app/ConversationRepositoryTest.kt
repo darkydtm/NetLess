@@ -15,6 +15,7 @@ import com.netless.common.ProfileId
 import com.netless.common.NodeId
 import com.netless.transport.TransportEndpoint
 import java.util.Base64
+import java.security.KeyPairGenerator
 
 class ConversationRepositoryTest {
 	@Test
@@ -22,7 +23,7 @@ class ConversationRepositoryTest {
 		val file = File.createTempFile("conversation", ".db").also { it.delete() }
 		val store = DurableEncryptedContentStore(file, PlainCipher)
 		val first = repository(store)
-		first.addContact("profile", "Alex", "node", "endpoint", Base64.getEncoder().encodeToString(ByteArray(32)))
+		first.addContact("profile", "Alex", "node", "endpoint", encodedPublicKey())
 		first.send("conversation", "hello", SendPolicy.Automatic).first()
 
 		val restored = repository(DurableEncryptedContentStore(file, PlainCipher))
@@ -33,7 +34,7 @@ class ConversationRepositoryTest {
 	@Test
 	fun `contact identity does not depend on endpoint`() = runTest {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
-		repository.addContact("profile", "Alex", "node", "endpoint", Base64.getEncoder().encodeToString(ByteArray(32)))
+		repository.addContact("profile", "Alex", "node", "endpoint", encodedPublicKey())
 		assertEquals("profile", repository.contacts().single().profileId)
 	}
 
@@ -44,11 +45,19 @@ class ConversationRepositoryTest {
 	}
 
 	@Test
+	fun `contact rejects malformed identity key`() {
+		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
+		kotlin.test.assertFailsWith<IllegalArgumentException> { repository.addContact("profile", "Alex", "node", "endpoint", "%%%") }
+	}
+
+	@Test
 	fun `send exposes delivery state`() = runTest {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
 		assertEquals(DeliveryState.Queued, repository.send("conversation", "hello", SendPolicy.Automatic).first())
 	}
 }
+
+private fun encodedPublicKey(): String = Base64.getEncoder().encodeToString(KeyPairGenerator.getInstance("EC").generateKeyPair().public.encoded)
 
 private object PlainCipher : ContentCipher {
 	override fun encrypt(content: ByteArray) = content

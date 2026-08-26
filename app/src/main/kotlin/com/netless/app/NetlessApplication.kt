@@ -68,7 +68,7 @@ class AppContainer(application: Application) {
 		verifySenderSignature = { packet, data ->
 			val content = packet.content
 			val key = contacts.contacts.value.firstOrNull { it.endpoint.metadata["profileId"] == content.senderProfileId.value }?.endpoint?.metadata?.get("identityKey")
-			key != null && identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(key)), data, com.netless.crypto.Signature(content.senderSignature))
+			key?.let { IdentityKeyCodec.canonicalize(it) }?.let { canonical -> identityRepository.verify(com.netless.crypto.PublicKey(java.util.Base64.getDecoder().decode(canonical)), data, com.netless.crypto.Signature(content.senderSignature)) } == true
 		},
 		onContent = { content -> conversations.onIncomingContent(content) },
 		localIdentity = localIdentity.publicKey,

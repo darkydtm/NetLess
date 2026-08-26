@@ -16,6 +16,14 @@ import java.io.DataOutputStream
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import java.util.Base64
+import com.netless.crypto.PublicKey
+
+internal object IdentityKeyCodec {
+	fun canonicalize(value: String): String? = runCatching {
+		val key = PublicKey(Base64.getDecoder().decode(value))
+		Base64.getEncoder().encodeToString(key.encoded)
+	}.getOrNull()
+}
 
 data class Contact(val profileId: String, val displayName: String, val nodeId: String, val endpoint: String, val identityKey: String)
 data class ChatMessage(val id: String, val conversationId: String, val body: String, val timestamp: Long, val deliveryState: DeliveryState, val read: Boolean = true)
@@ -46,9 +54,10 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun contacts() = contactStore.contacts.value.mapNotNull { node -> node.endpoint.metadata["profileId"]?.let { profile -> Contact(profile, node.endpoint.metadata["displayName"] ?: profile, node.nodeId.value, node.endpoint.address, node.endpoint.metadata["identityKey"].orEmpty()) } }
 	fun addContact(profileId: String, displayName: String, nodeId: String, endpoint: String, identityKey: String) = synchronized(lock) {
 		require(listOf(profileId, displayName, nodeId, endpoint, identityKey).all { it.isNotBlank() }) { "profileId, displayName, nodeId, endpoint, and identityKey are required" }
-		require(runCatching { Base64.getDecoder().decode(identityKey) }.getOrNull()?.size == 32) { "identityKey must be base64-encoded 32-byte public key" }
-		val contact = Contact(profileId, displayName, nodeId, endpoint, identityKey)
-		contactStore.upsert(com.netless.common.ProfileId(profileId), displayName, com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, emptyMap()), identityKey)
+		val canonicalIdentityKey = IdentityKeyCodec.canonicalize(identityKey)
+		require(canonicalIdentityKey != null) { "identityKey must be a valid Base64-encoded public key" }
+		val contact = Contact(profileId, displayName, nodeId, endpoint, canonicalIdentityKey!!)
+		contactStore.upsert(com.netless.common.ProfileId(profileId), displayName, com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, emptyMap()), canonicalIdentityKey!!)
 		publish()
 	}
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }
