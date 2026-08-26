@@ -15,7 +15,7 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 		val activeHops = outgoing.values.flatten().filter { it.expiresAtMillis > nowMillis }
 		val nodes = (activeHops.flatMap { listOf(it.nodeId, it.nextNodeId) }).toSet()
 		val starts = nodesByComponent(activeHops, nodes).flatMap { component ->
-			val incoming = allHops.filter { it.nextNodeId in component }.map { it.nextNodeId }.toSet()
+			val incoming = activeHops.filter { it.nextNodeId in component }.map { it.nextNodeId }.toSet()
 			val roots = component.filter { it !in incoming }
 			(if (roots.isEmpty() && maxHops == 1) emptySet() else if (roots.isEmpty()) component else roots).sortedBy { it.value }
 		}.sortedBy { it.value }
