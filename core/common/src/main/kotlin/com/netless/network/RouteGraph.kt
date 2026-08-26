@@ -13,8 +13,8 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 
 	fun routesTo(destination: NodeId, nowMillis: Long): List<Route> {
 		val activeHops = outgoing.values.flatten().filter { it.expiresAtMillis > nowMillis }
-		val nodes = (activeHops.flatMap { listOf(it.nodeId, it.nextNodeId) }).toSet()
-		val components = nodesByComponent(activeHops, nodes)
+		val nodes = allHops.flatMap { listOf(it.nodeId, it.nextNodeId) }.toSet()
+		val components = nodesByComponent(allHops, nodes)
 		val starts = components.flatMap { component ->
 			val incoming = activeHops.filter { it.nextNodeId in component }.map { it.nextNodeId }.toSet()
 			val roots = component.filter { it !in incoming }
