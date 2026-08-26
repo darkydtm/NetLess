@@ -135,7 +135,7 @@ class MeshRuntimeTest {
 	fun `forged and duplicate receipts are rejected`() = runTest {
 		val network = FakeNetwork()
 		val runtime = network.runtime()
-		network.relayStore.put(network.packet(), network.packetId, Long.MAX_VALUE, NodeId("relay"))
+		network.relayStore.put(network.packet(), network.packetId, Long.MAX_VALUE, NodeId("relay"), NodeId("destination"))
 
 		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("attacker"), 0L)), TransportType.Bluetooth) }.isFailure)
 		assertTrue(network.relayStore.contains(network.packetId))
