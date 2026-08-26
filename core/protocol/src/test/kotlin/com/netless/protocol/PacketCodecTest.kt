@@ -60,8 +60,9 @@ class PacketCodecTest {
 	@Test
 	fun legacyCodecRemainsAssignableToItsPublicInterface() {
 		val codec: PacketCodec = BinaryPacketCodec()
+		val legacyPacket = packet.copy(createdAtEpochMillis = 0L, expiresAtEpochMillis = Long.MAX_VALUE)
 
-		assertEquals(packet.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(packet)))
+		assertEquals(legacyPacket.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(legacyPacket)))
 	}
 
 	@Test
@@ -76,8 +77,9 @@ class PacketCodecTest {
 	@Test
 	fun legacyMigrationRequiresAnExplicitAdapter() {
 		val codec: VersionedPacketCodecContract = LegacyPacketCodecAdapter()
+		val legacyPacket = packet.copy(createdAtEpochMillis = 0L, expiresAtEpochMillis = Long.MAX_VALUE)
 
-		assertEquals(packet.copy(expiresAtEpochMillis = Long.MAX_VALUE), codec.decode(codec.encode(packet)))
+		assertEquals(legacyPacket, codec.decode(codec.encode(legacyPacket)))
 		assertFailsWith<IllegalArgumentException> {
 			codec.encode(packet.copy(createdAtEpochMillis = 1L))
 		}

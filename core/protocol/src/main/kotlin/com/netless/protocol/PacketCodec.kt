@@ -30,7 +30,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 
 	override fun encode(packet: PacketEnvelope, nowMillis: Long): ByteArray {
 		checkVersion(packet.version)
-		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
+		require(packet.expiresAtEpochMillis > nowMillis) { "Packet has expired" }
 		return ByteArrayOutputStream().use { output ->
 			DataOutputStream(output).use { data ->
 				data.writeInt(packet.version)
@@ -52,7 +52,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 				val createdAt = input.readLong()
 				val expiresAt = input.readLong()
 				val packet = PacketEnvelope(readForwarding(input), readContent(input), version, createdAt, expiresAt)
-				require(expiresAt >= nowMillis) { "Packet has expired" }
+				require(expiresAt > nowMillis) { "Packet has expired" }
 				require(input.available() == 0) { "Trailing packet bytes" }
 				packet
 			}
@@ -162,13 +162,13 @@ class LegacyPacketCodecAdapter(
 		require(packet.createdAtEpochMillis == 0L && packet.expiresAtEpochMillis == Long.MAX_VALUE) {
 			"Legacy packet codec cannot encode packet timestamps"
 		}
-		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
+		require(packet.expiresAtEpochMillis > nowMillis) { "Packet has expired" }
 		return legacyCodec.encode(packet)
 	}
 
 	override fun decode(bytes: ByteArray, nowMillis: Long): PacketEnvelope {
 		val packet = legacyCodec.decode(bytes)
-		require(packet.expiresAtEpochMillis >= nowMillis) { "Packet has expired" }
+		require(packet.expiresAtEpochMillis > nowMillis) { "Packet has expired" }
 		return packet
 	}
 }
