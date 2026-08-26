@@ -43,7 +43,10 @@ class MeshRuntimeTest {
 		val content = content()
 		val result = network.origin.send(content, network.destinationId, TransportPolicy.Automatic())
 		assertEquals(DeliveryState.Delivered, result.state, "send result")
-		assertEquals(content, network.received, "received content")
+		assertEquals(content.eventId, network.received?.eventId, "received event")
+		assertEquals(content.senderProfileId, network.received?.senderProfileId, "received sender")
+		assertEquals(content.recipients, network.received?.recipients, "received recipients")
+		assertContentEquals(content.encryptedPayload, network.received?.encryptedPayload, "received payload")
 		assertEquals(result.packetId, network.destinationReceipt?.packetId, "destination receipt packet")
 		assertEquals(DeliveryState.Delivered, network.destinationReceipt?.state, "destination receipt state")
 		assertEquals(network.destinationReceipt, network.relayReceipt, "relay receipt")
@@ -365,3 +368,7 @@ private object TestKeyWrapper : KeyWrapper {
 }
 
 private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper), nowMillis = { 1_000L })
+
+private fun assertContentEquals(expected: ByteArray, actual: ByteArray?, message: String) {
+	assertTrue(actual != null && expected.contentEquals(actual), message)
+}
