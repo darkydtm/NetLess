@@ -6,6 +6,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import com.netless.transport.DiscoveryAdvertisement
 import com.netless.transport.DiscoveryCapability
 import com.netless.transport.TransportType
@@ -25,18 +26,18 @@ class RuntimeController(
 
 	fun startDiscovery() {
 		if (discoveryJob != null) return
-		discoveryJob = scope.launch {
+		discoveryJob = scope.launch(SupervisorJob()) {
 			localPort = runCatching {
 				kotlinx.coroutines.withContext(Dispatchers.IO) {
 					peerMessages?.startServer(this) ?: 0
 				}
 			}.getOrDefault(0)
 			advertisement(localPort)?.let {
-				ble.advertise(it)
-				wifiDirect.advertise(it)
+				runCatching { ble.advertise(it) }
+				runCatching { wifiDirect.advertise(it) }
 			}
-			launch { ble.startDiscovery().collect(contacts::upsert) }
-			launch { wifiDirect.startDiscovery().collect(contacts::upsert) }
+			launch { runCatching { ble.startDiscovery().collect(contacts::upsert) } }
+			launch { runCatching { wifiDirect.startDiscovery().collect(contacts::upsert) } }
 		}
 	}
 

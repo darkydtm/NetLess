@@ -79,8 +79,7 @@ class FileKeyStore(private val keyWrapper: KeyWrapper = AndroidKeystoreKeyWrappe
 
 class AndroidKeystoreKeyWrapper(private val alias: String = "netless-database-key-wrapper") : KeyWrapper {
 	override fun wrap(key: ByteArray): ByteArray = Cipher.getInstance("AES/GCM/NoPadding").run {
-		val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-		init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, iv))
+		init(Cipher.ENCRYPT_MODE, key())
 		iv + doFinal(key)
 	}
 

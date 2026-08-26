@@ -14,23 +14,36 @@ class AudioRuntime {
 	private var sequence = 0L
 
 	fun start() {
+		if (recorder != null || track != null) return
 		bufferSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
 		if (bufferSize <= 0) error("Audio input unavailable")
 		recorder = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
+		if (recorder?.state != AudioRecord.STATE_INITIALIZED) {
+			recorder?.release()
+			recorder = null
+			error("Audio input unavailable")
+		}
 		track = AudioTrack.Builder()
 			.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).build())
 			.setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
 			.setBufferSizeInBytes(bufferSize)
 			.build()
+		if (track?.state != AudioTrack.STATE_INITIALIZED) {
+			recorder?.release()
+			recorder = null
+			track?.release()
+			track = null
+			error("Audio output unavailable")
+		}
 		recorder?.startRecording()
 		track?.play()
 	}
 
 	fun stop() {
-		recorder?.stop()
+		runCatching { recorder?.stop() }
 		recorder?.release()
 		recorder = null
-		track?.stop()
+		runCatching { track?.stop() }
 		track?.release()
 		track = null
 	}
