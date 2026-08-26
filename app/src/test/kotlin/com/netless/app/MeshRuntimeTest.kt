@@ -140,9 +140,9 @@ class MeshRuntimeTest {
 		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("attacker"), 0L)), TransportType.Bluetooth) }.isFailure)
 		assertTrue(network.relayStore.contains(network.packetId))
 
-		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth)
+		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("local"), 0L)), TransportType.Bluetooth)
 		assertTrue(!network.relayStore.contains(network.packetId))
-		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth) }.isFailure)
+		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("local"), 0L)), TransportType.Bluetooth) }.isFailure)
 	}
 
 	@Test
@@ -354,4 +354,4 @@ private object TestKeyWrapper : KeyWrapper {
 	override fun unwrap(wrappedKey: ByteArray) = wrappedKey.copyOf()
 }
 
-private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper))
+private fun testRelayStore() = RelayStore(com.netless.database.DatabaseKeyStore(TestKeyWrapper), nowMillis = { 0L })
