@@ -217,12 +217,12 @@ class MeshRuntime(
 
 	private fun canonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
 		forwarding = packet.forwarding.copy(perHopIntegrity = byteArrayOf(0)),
-		content = packet.content.copy(senderSignature = byteArrayOf()),
+		content = packet.content.copy(senderSignature = byteArrayOf(0)),
 	), now)
 
 	private fun originCanonical(packet: PacketEnvelope, now: Long): ByteArray = codec.encode(packet.copy(
 		forwarding = packet.forwarding.copy(currentNodeId = packet.forwarding.finalNodeId, nextHop = null, hopCount = 0, perHopIntegrity = byteArrayOf(0)),
-		content = packet.content.copy(senderSignature = byteArrayOf()),
+		content = packet.content.copy(senderSignature = byteArrayOf(0)),
 	), now)
 
 	private fun receipt(packetId: PacketId, state: DeliveryState) = DeliveryReceipt(packetId, state, localNode, nowMillis())
