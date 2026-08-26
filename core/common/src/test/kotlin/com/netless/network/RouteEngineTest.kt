@@ -67,6 +67,16 @@ class RouteEngineTest {
 	}
 
 	@Test
+	fun `independent component does not limit route expiry`() {
+		val graph = graphOf(
+			hop("a", "target", TransportType.WifiDirect, expiresAt = 250L),
+			hop("x", "y", TransportType.Bluetooth, expiresAt = 150L),
+		)
+
+		assertEquals(250L, graph.routesTo(target, 100L).single().expiresAtMillis)
+	}
+
+	@Test
 	fun `route preserves hop endpoints and metrics`() {
 		val first = hop("a", "b", TransportType.Bluetooth, expiresAt = 150L).copy(
 			endpoint = TransportEndpoint(NodeId("b"), "bluetooth-b"),

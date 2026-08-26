@@ -23,7 +23,7 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 		return starts.flatMap { start ->
 			val component = components.first { start in it }
 			val componentExpiry = allHops
-				.filter { it.nodeId in component || it.nextNodeId in component }
+				.filter { it.nodeId in component && it.nextNodeId in component }
 				.minOfOrNull { it.expiresAtMillis } ?: Long.MAX_VALUE
 			routesFrom(start, destination, nowMillis)
 				.map { it.copy(expiresAtMillis = minOf(it.expiresAtMillis, componentExpiry)) }
