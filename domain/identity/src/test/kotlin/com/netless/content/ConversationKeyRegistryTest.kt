@@ -22,7 +22,7 @@ class ConversationKeyRegistryTest {
 		val remote = EphemeralKeyExchange.generate()
 		val local = EphemeralKeyExchange.generate()
 		val offer = exchange.createOffer("session", remote.publicKey, identity, signer)
-		val registry = ConversationKeyRegistry { _: PublicKey, _: ByteArray, _: Signature -> exchange.verifyOffer(offer) }
+		val registry = ConversationKeyRegistry(verifyIdentity = { _: PublicKey, _: ByteArray, _: Signature -> exchange.verifyOffer(offer) })
 		registry.establish(offer, local, remote.publicKey)
 
 		assertFailsWith<IllegalArgumentException> { registry.establish(offer, local, remote.publicKey) }
