@@ -42,7 +42,7 @@ class RelayStoreTest {
 		store.put(bytes, packetId, 86_400_000L, nextHop)
 		store.put(byteArrayOf(9), packetId, 90_000_000L, null)
 
-		assertEquals(0, store.count())
+		assertEquals(1, store.count())
 		assertContentEquals(bytes, store.get(packetId)!!.packet)
 		assertTrue(store.hasPending(packetId))
 		assertTrue(store.contains(packetId))
@@ -66,7 +66,7 @@ class RelayStoreTest {
 		store.markDelivered(packetId)
 
 		assertNull(store.get(packetId))
-		assertEquals(1, store.count())
+		assertEquals(0, store.count())
 	}
 
 	@Test
