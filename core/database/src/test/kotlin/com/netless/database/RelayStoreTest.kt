@@ -7,6 +7,7 @@ import com.netless.protocol.DeliveryState
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.RandomAccessFile
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -307,7 +308,7 @@ class RelayStoreTest {
 	fun rejectsOversizedPersistedFileBeforeReadingEntries() {
 		val file = File.createTempFile("relay-store", ".bin")
 		try {
-			file.setLength(32L * 1024 * 1024 + 1)
+			RandomAccessFile(file, "rw").use { it.setLength(32L * 1024 * 1024 + 1) }
 
 			assertEquals(0, RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), file, nowMillis = { 0L }).count())
 		} finally {
@@ -350,7 +351,7 @@ class RelayStoreTest {
 	}
 }
 
-private class RecordingKeyWrapper : KeyWrapper {
+class RecordingKeyWrapper : KeyWrapper {
 	override fun wrap(key: ByteArray): ByteArray = key.reversedArray()
 
 	override fun unwrap(wrappedKey: ByteArray): ByteArray = wrappedKey.reversedArray()
