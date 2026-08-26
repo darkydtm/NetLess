@@ -68,7 +68,7 @@ class MeshRuntimeTest {
 
 		network.restartDestination()
 
-		assertEquals(network.destinationReceipt, network.destination.receive(packet, TransportType.WifiDirect))
+		assertEquals(receipt, network.destination.receive(packet, TransportType.WifiDirect))
 		assertEquals(1, network.contentDeliveries)
 		assertEquals(receipt, network.destinationReceipt)
 		assertEquals(result.packetId, receipt?.packetId)
@@ -295,11 +295,14 @@ private class FakeNetwork {
 		},
 		{ destination, policy ->
 			val next = if (local == NodeId("relay")) destination else NodeId("relay")
-			val transport = if (local == NodeId("relay")) TransportType.WifiDirect else TransportType.Bluetooth
-			val hops = listOf(
-				RouteHop(local, next, transport, endpoint(transport, next.value), metrics(), Long.MAX_VALUE),
-			)
-			Route(listOf(local, next), metrics(), hops = hops)
+			val transports = if (local == NodeId("relay")) listOf(TransportType.WifiDirect) else policy.preferences.ifEmpty { listOf(TransportType.Bluetooth) }
+			val transport = transports.firstOrNull { it !in disabled }
+			if (transport == null) null else {
+				val hops = listOf(
+					RouteHop(local, next, transport, endpoint(transport, next.value), metrics(), Long.MAX_VALUE),
+				)
+				Route(listOf(local, next), metrics(), hops = hops)
+			}
 		},
 		relayStore = relayStore,
 		signPacket = { byteArrayOf(9) },
