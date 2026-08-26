@@ -42,7 +42,7 @@ class MeshRuntimeTest {
 		val network = ThreeNodeNetwork()
 		val content = content()
 		val result = runCatching { network.origin.send(content, network.destinationId, TransportPolicy.Automatic()) }
-			.getOrElse { error("three-node delivery failed: ${it.message}", it) }
+			.getOrElse { throw AssertionError("three-node delivery failed: ${it.message}", it) }
 
 		assertEquals(DeliveryState.Delivered, result.state, "send result")
 		assertEquals(content, network.received, "received content")
@@ -64,14 +64,14 @@ class MeshRuntimeTest {
 	fun `duplicate packet replays terminal receipt without handing off content twice`() = runTest {
 		val network = ThreeNodeNetwork()
 		val result = runCatching { network.origin.send(content(), network.destinationId, TransportPolicy.Automatic()) }
-			.getOrElse { error("initial delivery failed: ${it.message}", it) }
+			.getOrElse { throw AssertionError("initial delivery failed: ${it.message}", it) }
 		val packet = network.destinationPacket!!
 		val receipt = network.destinationReceipt
 
 		network.restartDestination()
 
 		val replay = runCatching { network.destination.receive(packet, TransportType.WifiDirect) }
-			.getOrElse { error("replay failed: ${it.message}", it) }
+			.getOrElse { throw AssertionError("replay failed: ${it.message}", it) }
 		assertEquals(receipt, replay, "replayed receipt")
 		assertEquals(1, network.contentDeliveries)
 		assertEquals(receipt, network.destinationReceipt)
