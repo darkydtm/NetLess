@@ -90,7 +90,6 @@ class MeshRuntime(
 			return terminalReceipts.getValue(packet.forwarding.packetId).also(::emit)
 		}
 		val pending = relayStore?.get(packet.forwarding.packetId)
-		receiptIngress.putIfAbsent(packet.forwarding.packetId, ingress)
 		if (pending?.state == com.netless.database.RelayState.PENDING) {
 			val retryHop = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())?.hops?.firstOrNull()
 			return if (retryHop != null) forward(pending.packet, packet.forwarding.packetId, retryHop, now) else receipt(packet.forwarding.packetId, DeliveryState.Relaying).also(::emit)
