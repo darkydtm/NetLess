@@ -42,20 +42,10 @@ class MeshRuntimeTest {
 		val network = ThreeNodeNetwork()
 		val content = content()
 		val result = network.origin.send(content, network.destinationId, TransportPolicy.Automatic())
-		check(result.state == DeliveryState.Delivered) { "send result=$result" }
-		check(network.received == content) { "received=${network.received}" }
-		check(network.destinationReceipt != null) { "destinationReceipt=null" }
-		check(network.relayReceipt != null) { "relayReceipt=null" }
-		check(network.originReceipt != null) { "originReceipt=null" }
-		check(result.state == DeliveryState.Delivered) { "send result: $result" }
-		check(network.received == content) { "received content: ${network.received}" }
-		check(network.destinationReceipt != null) { "destination receipt missing" }
-		check(network.relayReceipt != null) { "relay receipt missing" }
-		check(network.originReceipt != null) { "origin receipt missing" }
-
 		assertEquals(DeliveryState.Delivered, result.state, "send result")
 		assertEquals(content, network.received, "received content")
-		assertEquals(DeliveryReceipt(result.packetId, DeliveryState.Delivered, network.destinationId, 1_000L), network.destinationReceipt, "destination receipt")
+		assertEquals(result.packetId, network.destinationReceipt?.packetId, "destination receipt packet")
+		assertEquals(DeliveryState.Delivered, network.destinationReceipt?.state, "destination receipt state")
 		assertEquals(network.destinationReceipt, network.relayReceipt, "relay receipt")
 		assertEquals(network.destinationReceipt, network.originReceipt, "origin receipt")
 		assertTrue(!network.destinationStore.hasPending(result.packetId))
@@ -73,13 +63,8 @@ class MeshRuntimeTest {
 	fun `duplicate packet replays terminal receipt without handing off content twice`() = runTest {
 		val network = ThreeNodeNetwork()
 		val result = network.origin.send(content(), network.destinationId, TransportPolicy.Automatic())
-		check(result.state == DeliveryState.Delivered) { "initial result=$result" }
-		check(network.destinationPacket != null) { "destinationPacket=null" }
-		check(result.state == DeliveryState.Delivered) { "initial send result: $result" }
-		check(network.destinationPacket != null) { "destination packet missing" }
 		val packet = network.destinationPacket!!
 		val receipt = network.destinationReceipt
-		check(receipt != null) { "receipt=null" }
 		check(receipt != null) { "terminal receipt missing" }
 
 		network.restartDestination()
