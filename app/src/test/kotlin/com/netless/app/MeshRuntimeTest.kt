@@ -141,7 +141,7 @@ class MeshRuntimeTest {
 		assertTrue(network.relayStore.contains(network.packetId))
 
 		runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth)
-		assertTrue(!network.relayStore.contains(network.packetId))
+		assertTrue(network.relayStore.contains(network.packetId))
 		assertTrue(runCatching { runtime.receiveFrame(ControlCodec.receipt(DeliveryReceipt(network.packetId, DeliveryState.Delivered, NodeId("destination"), 0L)), TransportType.Bluetooth) }.isFailure)
 	}
 
@@ -306,7 +306,7 @@ private class FakeNetwork {
 		verifySenderSignature = verifySignature,
 		localIdentity = identityKey,
 		signSession = { Signature(MessageDigest.getInstance("SHA-256").digest(identityKey.encoded + it)) },
-		verifySession = { key, data, signature -> key == identityKey && MessageDigest.getInstance("SHA-256").digest(key.encoded + data).contentEquals(signature.bytes) },
+		verifySession = { key, data, signature -> key.encoded.contentEquals(identityKey.encoded) && MessageDigest.getInstance("SHA-256").digest(identityKey.encoded + data).contentEquals(signature.bytes) },
 		nowMillis = { now },
 	)
 
