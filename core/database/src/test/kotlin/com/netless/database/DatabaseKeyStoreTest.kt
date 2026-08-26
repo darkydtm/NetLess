@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class DatabaseKeyStoreTest {
 	@Test
 	fun createsRandomKeysThatRoundTripThroughTheWrapper() {
-		val wrapper = RecordingKeyWrapper()
+		val wrapper = DatabaseRecordingKeyWrapper()
 		val store = DatabaseKeyStore(wrapper)
 		val first = store.createWrappedKey()
 		val second = store.createWrappedKey()
@@ -21,7 +21,7 @@ class DatabaseKeyStoreTest {
 
 	@Test
 	fun fileKeysRoundTripThroughTheWrapper() {
-		val wrapper = RecordingKeyWrapper()
+		val wrapper = DatabaseRecordingKeyWrapper()
 		val store = FileKeyStore(wrapper)
 		val key = store.createWrappedKey()
 
@@ -29,7 +29,7 @@ class DatabaseKeyStoreTest {
 	}
 }
 
-private class RecordingKeyWrapper : KeyWrapper {
+private class DatabaseRecordingKeyWrapper : KeyWrapper {
 	private val originals = mutableMapOf<List<Byte>, ByteArray>()
 
 	override fun wrap(key: ByteArray): ByteArray = key.reversedArray().also { originals[it.toList()] = key.copyOf() }
