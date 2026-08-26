@@ -207,7 +207,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			relayStore = store, signPacket = { sign(keys.getValue(node.value), it) }, verifySenderSignature = { packet, data ->
 				keys[packet.content.senderProfileId.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true
 			}, onContent = onContent,
-			localIdentity = keys.getValue(node.value), signSession = { signSession(keys.getValue(node.value), it) }, verifySession = { key, data, signature -> keys.values.any { it == key } && signSession(key, data) == signature }, nowMillis = { 1_000L }
+			localIdentity = keys.getValue(node.value), signSession = { signSession(keys.getValue(node.value), it) }, verifySession = { key, data, signature -> keys.values.any { it == key && signSession(it, data) == signature } }, nowMillis = { 1_000L }
 		)
 		origin = runtime(NodeId("origin"), originStore, listOf(TransportType.Bluetooth to NodeId("relay")))
 		relay = runtime(NodeId("relay"), relayStore, listOf(TransportType.WifiDirect to destinationId))
@@ -226,7 +226,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			onContent = { received = it; contentDeliveries++ },
 			localIdentity = keys.getValue(destinationId.value),
 			signSession = { signSession(keys.getValue(destinationId.value), it) },
-			verifySession = { key, data, signature -> keys.values.any { it == key } && signSession(key, data) == signature },
+			verifySession = { key, data, signature -> keys.values.any { it == key && signSession(it, data) == signature } },
 			nowMillis = { 1_000L },
 		)
 	}
@@ -259,7 +259,13 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 						val response = nodes.getValue(peer)().receiveFrame(packet, type)
 					when (val decoded = ControlCodec.decode(response)) {
 						is Forward -> error("unexpected forwarded response")
-						is Receipt -> when (peer.value) { "destination" -> network.destinationReceipt = decoded.value; "relay" -> { network.relayReceipt = decoded.value; network.originReceipt = decoded.value } }
+						is Receipt -> when (peer.value) {
+							"destination" -> {
+								network.destinationReceipt = decoded.value
+								if (decoded.value.state == DeliveryState.Failed) network.relayFailureReceipt = decoded.value
+							}
+							"relay" -> { network.relayReceipt = decoded.value; network.originReceipt = decoded.value }
+						}
 						is Acknowledgement -> if (!decoded.value.accepted) network.relayFailureReceipt = DeliveryReceipt(decoded.value.packetId, DeliveryState.Failed, peer, 1_000L)
 					}
 					incoming.send(response)
