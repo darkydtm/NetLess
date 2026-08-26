@@ -242,7 +242,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			require(endpoint.nodeId == peer && request.expectedPeerIdentity == network.keys.getValue(peer.value))
 			require(request.sessionId == "${type.name}:${peer.value}")
 			require(request.protocolVersion == 1)
-			val challenge = sessionChallenge(request.sessionId, request.expectedPeerIdentity)
+			val challenge = network.sessionChallenge(request.sessionId, request.expectedPeerIdentity)
 				val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
 			require(request.verify(request.expectedPeerIdentity, challenge, signature)) { "forged session rejected" }
 			network.usedTransports += type
@@ -257,6 +257,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 						if (peer.value == "destination") network.destinationPacket = forwarded
 						val response = nodes.getValue(peer)().receiveFrame(packet, type)
 					when (val decoded = ControlCodec.decode(response)) {
+						is Forward -> error("unexpected forwarded response")
 						is Receipt -> when (peer.value) { "destination" -> network.destinationReceipt = decoded.value; "relay" -> { network.relayReceipt = decoded.value; network.originReceipt = decoded.value } }
 						is Acknowledgement -> if (!decoded.value.accepted) network.relayFailureReceipt = DeliveryReceipt(decoded.value.packetId, DeliveryState.Failed, peer, 1_000L)
 					}
