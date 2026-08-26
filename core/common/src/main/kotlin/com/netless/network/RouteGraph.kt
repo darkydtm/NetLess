@@ -14,14 +14,20 @@ class RouteGraph(hops: List<RouteHop>, private val maxHops: Int = TransferPolicy
 	fun routesTo(destination: NodeId, nowMillis: Long): List<Route> {
 		val activeHops = outgoing.values.flatten().filter { it.expiresAtMillis > nowMillis }
 		val nodes = (activeHops.flatMap { listOf(it.nodeId, it.nextNodeId) }).toSet()
-		val starts = nodesByComponent(activeHops, nodes).flatMap { component ->
+		val components = nodesByComponent(activeHops, nodes)
+		val starts = components.flatMap { component ->
 			val incoming = activeHops.filter { it.nextNodeId in component }.map { it.nextNodeId }.toSet()
 			val roots = component.filter { it !in incoming }
 			(if (roots.isEmpty() && maxHops == 1) emptySet() else if (roots.isEmpty()) component else roots).sortedBy { it.value }
 		}.sortedBy { it.value }
-		val componentExpiry = allHops.minOfOrNull { it.expiresAtMillis } ?: Long.MAX_VALUE
-		return starts.flatMap { start -> routesFrom(start, destination, nowMillis) }
-			.map { it.copy(expiresAtMillis = minOf(it.expiresAtMillis, componentExpiry)) }
+		return starts.flatMap { start ->
+			val component = components.first { start in it }
+			val componentExpiry = allHops
+				.filter { it.nodeId in component || it.nextNodeId in component }
+				.minOfOrNull { it.expiresAtMillis } ?: Long.MAX_VALUE
+			routesFrom(start, destination, nowMillis)
+				.map { it.copy(expiresAtMillis = minOf(it.expiresAtMillis, componentExpiry)) }
+		}
 	}
 
 	val hopLimit: Int
