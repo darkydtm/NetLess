@@ -175,7 +175,9 @@ class MeshRuntime(
 						require(response.value.state == DeliveryState.Delivered)
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					propagatedReceipt = response.value
-					relayStore?.markTerminal(packetId, response.value)
+						if (relayStore?.get(packetId)?.state == com.netless.database.RelayState.PENDING) {
+							relayStore.markTerminal(packetId, response.value)
+						}
 					}
 				}
 				is Acknowledgement -> {
@@ -183,12 +185,16 @@ class MeshRuntime(
 					if (response.value.finalDelivery) {
 						require(hop.nextNodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "terminal acknowledgement from non-final hop" }
 						propagatedReceipt = DeliveryReceipt(packetId, DeliveryState.Delivered, hop.nextNodeId, now)
-						relayStore?.markTerminal(packetId, propagatedReceipt!!)
+						if (relayStore?.get(packetId)?.state == com.netless.database.RelayState.PENDING) {
+							relayStore.markTerminal(packetId, propagatedReceipt!!)
+						}
 					} else {
 						val receipt = ControlCodec.decode(incoming.receive())
 						require(receipt is Receipt && receipt.value.packetId == packetId && receipt.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId && receipt.value.state == DeliveryState.Delivered)
 						propagatedReceipt = receipt.value
-						relayStore?.markTerminal(packetId, propagatedReceipt!!)
+						if (relayStore?.get(packetId)?.state == com.netless.database.RelayState.PENDING) {
+							relayStore.markTerminal(packetId, propagatedReceipt!!)
+						}
 					}
 				}
 				else -> error("unexpected control response")
