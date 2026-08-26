@@ -60,7 +60,7 @@ class MeshRuntime(
 		val firstHop = selected.hops.firstOrNull()?.nextNodeId
 		val currentNode = firstHop ?: localNode
 		val nextHop = selected.hops.getOrNull(1)?.nextNodeId ?: destination.takeUnless { it == currentNode }
-		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, byteArrayOf(0), currentNode), content.copy(senderSignature = byteArrayOf()), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
+		val unsigned = PacketEnvelope(ForwardingEnvelope(packetId, destination, nextHop, 0, selected.hops.size.toLong(), com.netless.common.TrafficClass.Reliable, ByteArray(32), currentNode), content.copy(senderSignature = byteArrayOf()), createdAtEpochMillis = now, expiresAtEpochMillis = selected.expiresAtMillis)
 		val signature = signPacket(originCanonical(unsigned, now))
 		if (signature.isEmpty()) return receipt(packetId, DeliveryState.Failed).also(::emit)
 		val signed = unsigned.copy(content = content.copy(senderSignature = signature))
