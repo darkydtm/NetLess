@@ -31,6 +31,7 @@ import kotlin.test.assertTrue
 import com.netless.crypto.PublicKey
 import com.netless.crypto.Signature
 import com.netless.database.RelayStore
+import com.netless.database.KeyWrapper
 import java.util.Base64
 import java.security.MessageDigest
 import java.io.File
@@ -181,7 +182,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 	val originStore = RelayStore()
 	val relayStore = RelayStore()
 	private val destinationFile = File.createTempFile("mesh-destination", ".bin").also { it.delete() }
-	private val keyStore = com.netless.database.DatabaseKeyStore()
+	private val keyStore = com.netless.database.DatabaseKeyStore(TestKeyWrapper)
 	var destinationStore = RelayStore(keyStore, destinationFile, nowMillis = { 1_000L })
 	var received: ContentEnvelope? = null
 	var contentDeliveries = 0
@@ -346,4 +347,9 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		return connect(endpoint)
 	}
 	override fun supports(capability: com.netless.transport.DiscoveryCapability) = true
+}
+
+private object TestKeyWrapper : KeyWrapper {
+	override fun wrap(key: ByteArray) = key.copyOf()
+	override fun unwrap(wrappedKey: ByteArray) = wrappedKey.copyOf()
 }
