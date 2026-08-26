@@ -50,7 +50,7 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun observeConversations(): Flow<List<ConversationSummary>> = conversationState.asStateFlow()
 	fun observeMessages(conversationId: String): Flow<List<ChatMessage>> = state.map { it.filter { message -> message.conversationId == conversationId } }
 	fun messages(conversationId: String) = state.value.filter { it.conversationId == conversationId }
-	fun observeDelivery(messageId: String): Flow<DeliveryState> = deliveryState.getOrPut(messageId) { MutableStateFlow(messages.firstOrNull { it.id == messageId }?.deliveryState ?: DeliveryState.Failed) }.asStateFlow()
+	fun observeDelivery(messageId: String): Flow<DeliveryState> = deliveryState.getOrPut(messageId) { MutableStateFlow(state.value.firstOrNull { it.id == messageId }?.deliveryState ?: DeliveryState.Failed) }.asStateFlow()
 	fun contacts() = contactStore.contacts.value.mapNotNull { node -> node.endpoint.metadata["profileId"]?.let { profile -> Contact(profile, node.endpoint.metadata["displayName"] ?: profile, node.nodeId.value, node.endpoint.address, node.endpoint.metadata["identityKey"].orEmpty()) } }
 	fun addContact(profileId: String, displayName: String, nodeId: String, endpoint: String, identityKey: String) = synchronized(lock) {
 		require(listOf(profileId, displayName, nodeId, endpoint, identityKey).all { it.isNotBlank() }) { "profileId, displayName, nodeId, endpoint, and identityKey are required" }

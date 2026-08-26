@@ -31,7 +31,6 @@ fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, con
 			Box(Modifier.weight(1f).fillMaxHeight().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
 			if (state.currentTab == MessengerTab.Chats) ConversationScreen(state, viewModel, Modifier.weight(1f).fillMaxHeight())
 		}
-		}
 	}
 }
 

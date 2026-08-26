@@ -167,11 +167,14 @@ class MeshRuntime(
 				is Receipt -> {
 					require(response.value.packetId == packetId && response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId)
 					require(response.value.timestampEpochMillis <= now) { "receipt timestamp is in the future" }
-					if (response.value.state == DeliveryState.Failed) return response.value.also(::emit)
-					require(response.value.state == DeliveryState.Delivered)
+					if (response.value.state == DeliveryState.Failed) {
+						propagatedReceipt = response.value
+					} else {
+						require(response.value.state == DeliveryState.Delivered)
 					require(response.value.nodeId == codec.decode(bytes, now).forwarding.finalNodeId) { "receipt destination does not match packet" }
 					propagatedReceipt = response.value
 					relayStore?.markTerminal(packetId, response.value)
+					}
 				}
 				is Acknowledgement -> {
 					require(response.value.packetId == packetId && response.value.nodeId == hop.nextNodeId && response.value.accepted)

@@ -25,7 +25,6 @@ class MessageRepository(private val store: DurableEncryptedContentStore) {
 		store.get("message:$id")?.let(::decode)
 	}
 
-	@Synchronized
 	suspend fun onContent(content: ContentEnvelope) {
 		error("MessageRepository does not accept opaque content")
 	}

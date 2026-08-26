@@ -83,7 +83,7 @@ class AppContainer(application: Application) {
 				val destination = com.netless.common.NodeId(contact.nodeId)
 				val envelope = com.netless.protocol.ContentEnvelope(message.id, localIdentity.profileId, listOf(com.netless.common.ProfileId(contact.profileId)), payload.encode(), byteArrayOf())
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
-				meshRuntime.send(envelope, destination, selected).state
+				return meshRuntime.send(envelope, destination, selected).state
 			}
 	}, contentCipher = contentCipher, contactStore = contacts, localProfileId = localIdentity.profileId.value)
 	}
@@ -120,6 +120,7 @@ class AppContainer(application: Application) {
 private fun com.netless.transport.WifiDirectDataTransport.asAdapter(identity: com.netless.crypto.PublicKey, sign: suspend (ByteArray) -> com.netless.crypto.Signature, verify: suspend (com.netless.crypto.PublicKey, ByteArray, com.netless.crypto.Signature) -> Boolean) = object : com.netless.transport.TransportAdapter {
 	override val type = com.netless.transport.TransportType.WifiDirect
 	override val availability = state
+	override suspend fun connect(endpoint: com.netless.transport.TransportEndpoint) = this@asAdapter.connect(endpoint)
 	override suspend fun connectAuthenticated(endpoint: com.netless.transport.TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest) = this@asAdapter.connectAuthenticated(endpoint, request.protocolVersion, request.sessionId, identity, request.sign, request.verify).also {
 		require(it.peerIdentity?.encoded?.contentEquals(request.expectedPeerIdentity.encoded) == true) { "authenticated peer identity mismatch" }
 	}
