@@ -69,6 +69,6 @@ private class FakeSender : MessageSender {
 }
 
 private fun repository(store: DurableEncryptedContentStore): ConversationRepository {
-	val keys = ConversationKeyRegistry { _, _, _ -> true }.also { it.register("conversation", KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) }
+	val keys = ConversationKeyRegistry({ _, _, _ -> true }, store).also { it.register("conversation", KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()) }
 	return ConversationRepository(store, FakeSender(), ConversationContentCipher(keys), ContactStore(store), "local")
 }

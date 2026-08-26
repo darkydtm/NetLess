@@ -160,7 +160,7 @@ class MeshRuntimeTest {
 	fun `relay rewrite preserves integrity for destination validation`() = runTest {
 		val network = FakeNetwork()
 		val packet = com.netless.protocol.PacketEnvelope(
-			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("relay"), NodeId("relay"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
+			com.netless.protocol.ForwardingEnvelope(network.packetId, NodeId("destination"), NodeId("relay"), 0, 2, TrafficClass.Reliable, ByteArray(32), NodeId("local")),
 			content().copy(senderSignature = byteArrayOf(9)), createdAtEpochMillis = 100, expiresAtEpochMillis = Long.MAX_VALUE,
 		)
 		val now = 1000L
@@ -218,7 +218,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 		destination = MeshRuntime(
 			destinationId,
 			TransportRegistry(),
-			{ error("destination has no outbound route") },
+			suspend { error("destination has no outbound route") },
 			relayStore = destinationStore,
 			signPacket = { sign(keys.getValue(destinationId.value), it) },
 			verifySenderSignature = { packet, data -> keys[packet.content.senderProfileId.value]?.let { sign(it, data).contentEquals(packet.content.senderSignature) } == true },
@@ -232,7 +232,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 
 	private fun sign(key: PublicKey, data: ByteArray) = MessageDigest.getInstance("SHA-256").digest(key.encoded + data)
 	private fun signSession(key: PublicKey, data: ByteArray) = Signature(sign(key, data))
-	private fun sessionChallenge(protocolVersion: Int, sessionId: String, identity: PublicKey) = "$protocolVersion:$sessionId".encodeToByteArray() + identity.encoded
+	private fun sessionChallenge(sessionId: String, identity: PublicKey) = MessageDigest.getInstance("SHA-256").digest(sessionId.encodeToByteArray() + identity.encoded)
 
 	private fun endpoint(type: TransportType, node: NodeId) = TransportEndpoint(node, type.name, mapOf("nodeId" to node.value, "identityKey" to Base64.getEncoder().encodeToString(keys.getValue(node.value).encoded), "sessionId" to "${type.name}:${node.value}"))
 
@@ -242,7 +242,7 @@ private class ThreeNodeNetwork(failDestination: Boolean = false) {
 			require(endpoint.nodeId == peer && request.expectedPeerIdentity == network.keys.getValue(peer.value))
 			require(request.sessionId == "${type.name}:${peer.value}")
 			require(request.protocolVersion == 1)
-			val challenge = sessionChallenge(request.protocolVersion, request.sessionId, request.expectedPeerIdentity)
+			val challenge = sessionChallenge(request.sessionId, request.expectedPeerIdentity)
 				val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
 			require(request.verify(request.expectedPeerIdentity, challenge, signature)) { "forged session rejected" }
 			network.usedTransports += type
@@ -274,7 +274,7 @@ private class FakeNetwork {
 	val usedTransports = mutableListOf<TransportType>()
 	val disabled = mutableSetOf<TransportType>()
 	val relayStore = RelayStore()
-	private val identityKey = PublicKey(byteArrayOf(1, 2, 3))
+	val identityKey = PublicKey(byteArrayOf(1, 2, 3))
 
 	var forwardedPacket: ByteArray? = null
 	var forgeSession = false
@@ -313,6 +313,7 @@ private class FakeNetwork {
 		"identityKey" to Base64.getEncoder().encodeToString(identityKey.encoded),
 		"sessionId" to "${type.name}:$node",
 	))
+	private fun content() = ContentEnvelope("event", ProfileId("sender"), listOf(ProfileId("destination")), byteArrayOf(1), byteArrayOf(2))
 	private fun metrics() = RouteMetrics(1.0, 1.0, 1.0, 1.0)
 }
 
@@ -323,7 +324,8 @@ private class FakeAdapter(override val type: TransportType, private val network:
 		network.usedTransports += type
 		return object : TransportConnection {
 			override val peerIdentity: PublicKey = network.identityKey
-				override val incomingPackets = incoming.receiveAsFlow()
+			private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
+			override val incomingPackets = incoming.receiveAsFlow()
 				override suspend fun send(packet: ByteArray) {
 				network.forwardedPacket = (ControlCodec.decode(packet) as Forward).packet
 				val forwarded = ControlCodec.decode(packet) as Forward
@@ -332,13 +334,12 @@ private class FakeAdapter(override val type: TransportType, private val network:
 				incoming.send(ControlCodec.receipt(DeliveryReceipt(decoded.forwarding.packetId, DeliveryState.Delivered, decoded.forwarding.finalNodeId, 0L)))
 			}
 			 override suspend fun close() = Unit
-				private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
 		}
 	}
 	override suspend fun connectAuthenticated(endpoint: TransportEndpoint, request: com.netless.transport.AuthenticatedConnectionRequest): TransportConnection {
 		require(request.expectedPeerIdentity == network.identityKey)
 		require(request.sessionId == "${type.name}:${endpoint.nodeId.value}" && request.protocolVersion == 1)
-		val challenge = "${request.protocolVersion}:${request.sessionId}".encodeToByteArray() + request.expectedPeerIdentity.encoded
+		val challenge = MessageDigest.getInstance("SHA-256").digest(request.sessionId.encodeToByteArray() + request.expectedPeerIdentity.encoded)
 		val signature = if (network.forgeSession) Signature(ByteArray(1)) else request.sign(challenge)
 		require(request.verify(network.identityKey, challenge, signature)) { "forged session rejected" }
 		return connect(endpoint)
