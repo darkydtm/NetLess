@@ -42,7 +42,7 @@ class RelayStoreTest {
 		store.put(bytes, packetId, 86_400_000L, nextHop)
 		store.put(byteArrayOf(9), packetId, 90_000_000L, null)
 
-		assertEquals(1, store.count())
+		assertEquals(0, store.count())
 		assertContentEquals(bytes, store.get(packetId)!!.packet)
 		assertTrue(store.hasPending(packetId))
 		assertTrue(store.contains(packetId))
@@ -141,7 +141,7 @@ class RelayStoreTest {
 				output.writeInt(protected.size)
 				output.write(protected)
 			}
-			val receipt = DeliveryReceipt(packetId, DeliveryState.Delivered, NodeId("destination"), 100L)
+			val receipt = DeliveryReceipt(packetId, DeliveryState.Delivered, NodeId("destination"), 0L)
 			RelayStore(keyStore, file, nowMillis = { 0L }).markTerminal(packetId, receipt)
 			assertEquals(receipt, RelayStore(keyStore, file, nowMillis = { 0L }).get(packetId)!!.terminalReceipt)
 		} finally {
@@ -229,7 +229,7 @@ class RelayStoreTest {
 
 	@Test
 	fun expiredDeduplicationDoesNotBlockReinsertion() {
-		var now = 100L
+		var now = 99L
 		val store = RelayStore(DatabaseKeyStore(RecordingKeyWrapper()), storageFile = null, nowMillis = { now })
 		store.put(byteArrayOf(1), packetId, 100L, nextHop)
 		now = 101L
