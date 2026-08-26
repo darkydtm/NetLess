@@ -103,8 +103,10 @@ class MeshRuntime(
 				receipt(packet.forwarding.packetId, DeliveryState.Failed)
 			}
 			emit(result)
-			if (result.state == DeliveryState.Delivered) terminalReceipts[result.packetId] = result
-			if (result.state == DeliveryState.Delivered) relayStore?.markTerminal(result.packetId, result)
+			if (result.state == DeliveryState.Delivered) {
+				terminalReceipts[result.packetId] = result
+				relayStore?.markTerminal(result.packetId, result)
+			}
 			return result
 		}
 		val selected = route(packet.forwarding.finalNodeId, TransportPolicy.Automatic())
