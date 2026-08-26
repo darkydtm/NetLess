@@ -45,7 +45,7 @@ object VersionedPacketCodec : VersionedPacketCodecContract {
 
 	override fun decode(bytes: ByteArray, nowMillis: Long): PacketEnvelope {
 		require(bytes.isNotEmpty()) { "Packet bytes must not be empty" }
-		try {
+		return try {
 			DataInputStream(ByteArrayInputStream(bytes)).use { input ->
 				val version = input.readInt()
 				checkVersion(version)
