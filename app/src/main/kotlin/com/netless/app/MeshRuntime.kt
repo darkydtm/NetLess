@@ -207,7 +207,7 @@ class MeshRuntime(
 				return receipt(packetId, DeliveryState.Failed).also(::emit)
 			}
 		val result = propagatedReceipt ?: receipt(packetId, DeliveryState.Relaying)
-		if (result.state == DeliveryState.Delivered) terminalReceipts[packetId] = result
+		if (result.state != DeliveryState.Relaying) terminalReceipts[packetId] = result
 		if (result.state == DeliveryState.Delivered) relayStore?.markDelivered(packetId)
 		emit(result)
 		return result
