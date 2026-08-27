@@ -40,7 +40,7 @@ fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	LaunchedEffect(container) {
 		container.runtimeController.startDiscovery()
 	}
-	MessengerShell(messengerViewModel, viewModel, contacts)
+	PrototypeApp()
 }
 
 @Composable
@@ -60,36 +60,16 @@ private fun ProfileScreen(
 		modifier = Modifier.fillMaxSize().padding(24.dp).animateContentSize(),
 		verticalArrangement = Arrangement.spacedBy(16.dp),
 	) {
-		Text(
-			text = if (state.profile?.version == 0L) "Create your profile" else "Your profile",
-			style = MaterialTheme.typography.headlineMedium,
-		)
-		OutlinedTextField(
-			value = state.name,
-			onValueChange = onNameChanged,
-			label = { Text("Name") },
-			modifier = Modifier.fillMaxWidth(),
-			singleLine = true,
-			isError = state.error != null && state.name.isBlank(),
-		)
-		OutlinedTextField(
-			value = state.bio,
-			onValueChange = onBioChanged,
-			label = { Text("Bio") },
-			modifier = Modifier.fillMaxWidth(),
-			minLines = 3,
-		)
+		Text(text = if (state.profile?.version == 0L) "Create your profile" else "Your profile", style = MaterialTheme.typography.headlineMedium)
+		OutlinedTextField(value = state.name, onValueChange = onNameChanged, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true, isError = state.error != null && state.name.isBlank())
+		OutlinedTextField(value = state.bio, onValueChange = onBioChanged, label = { Text("Bio") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
 		state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 		AnimatedContent(targetState = contacts.size, label = "contact-count") { count -> Text("Nearby contacts: $count") }
 		contacts.forEach { contact -> Text(contact.endpoint.address, style = MaterialTheme.typography.bodyMedium) }
 		Text("Messages", style = MaterialTheme.typography.titleMedium)
-		messages.forEach { item ->
-			AnimatedVisibility(visible = true, enter = slideInVertically { it / 2 } + fadeIn(), exit = slideOutVertically() + fadeOut()) { Text(item.body) }
-		}
+		messages.forEach { item -> AnimatedVisibility(visible = true, enter = slideInVertically { it / 2 } + fadeIn(), exit = slideOutVertically() + fadeOut()) { Text(item.body) } }
 		OutlinedTextField(value = message, onValueChange = onMessageChanged, label = { Text("Message") }, modifier = Modifier.fillMaxWidth())
 		Button(onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSendMessage() }, enabled = message.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Send") }
-		Button(onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSave() }, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) {
-			Text(if (state.saving) "Saving..." else "Save profile")
-		}
+		Button(onClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onSave() }, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) { Text(if (state.saving) "Saving..." else "Save profile") }
 	}
 }

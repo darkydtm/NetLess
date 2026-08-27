@@ -60,9 +60,24 @@ fun PrototypeApp() {
 	}
 	MiuixTheme(controller) {
 		Scaffold(
-			topBar = { TopAppBar(title = selected?.let { peers.first { peer -> peer.id == it }.name } ?: when (tab) { Tab.Profile -> if (russian) "Профиль" else "Profile"; Tab.Settings -> if (russian) "Настройки" else "Settings"; else -> "NetlessGram" }), navigationIcon = { if (selected != null) IconButton({ selected = null }) { Icon(MiuixIcons.Back, "Back") } } },
+			topBar = {
+				TopAppBar(
+					title = selected?.let { id -> peers.first { it.id == id }.name } ?: when (tab) {
+						Tab.Profile -> if (russian) "Профиль" else "Profile"
+						Tab.Settings -> if (russian) "Настройки" else "Settings"
+						else -> "NetlessGram"
+					},
+					navigationIcon = { if (selected != null) IconButton({ selected = null }) { Icon(MiuixIcons.Back, "Back") } },
+				)
+			},
 			floatingActionButton = { if (tab == Tab.Chats && selected == null) IconButton({ selected = peers.first().id }) { Icon(MiuixIcons.Add, "Новый чат") } },
-			bottomBar = { if (selected == null) NavigationBar { Tab.entries.forEach { item -> NavigationBarItem(tab == item, { tab = item }, icon = item.item.icon, label = if (russian) item.ru else item.en) } } },
+			bottomBar = {
+				if (selected == null) {
+					NavigationBar {
+						Tab.entries.forEach { item -> NavigationBarItem(tab == item, { tab = item }, icon = item.item.icon, label = if (russian) item.ru else item.en) }
+					}
+				}
+			},
 		) { padding ->
 			Box(Modifier.fillMaxSize().padding(padding)) {
 				when {
