@@ -16,4 +16,16 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Relax Miuix AAR metadata
+        run: |
+          ./gradlew :app:help >/dev/null
+          find "$HOME/.gradle/caches/modules-2/files-2.1/top.yukonga.miuix.kmp" -name '*.aar' -print0 | while IFS= read -r -d '' aar; do
+            work="${aar}.work"
+            rm -rf "$work"
+            mkdir "$work"
+            unzip -q "$aar" -d "$work"
+            rm -f "$work/META-INF/com/android/build/gradle/aar-metadata.properties"
+            (cd "$work" && zip -qr "$aar" .)
+            rm -rf "$work"
+          done
       - run: ./gradlew :app:assembleDebug
