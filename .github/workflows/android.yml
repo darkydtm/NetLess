@@ -16,4 +16,4 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew -Pandroid.disableCompileSdkChecks=true :app:assembleDebug
+      - run: ./gradlew -Dandroid.experimental.disableCompileSdkChecks=true :app:assembleDebug
