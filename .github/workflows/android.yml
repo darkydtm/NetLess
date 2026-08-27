@@ -16,11 +16,4 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Relax Miuix AAR metadata
-        run: |
-          ./gradlew :app:dependencies >/dev/null
-          find "$HOME/.gradle/caches/modules-2/files-2.1/top.yukonga.miuix.kmp" -name '*.aar' -print0 | while IFS= read -r -d '' aar; do
-            zip -d "$aar" 'META-INF/com/android/build/gradle/aar-metadata.properties' || true
-          done
-          find "$HOME/.gradle/caches" -path '*/transforms-*/*' -type f -name 'aar-metadata.properties' -delete
-      - run: ./gradlew :app:assembleDebug
+      - run: ./gradlew -Pandroid.disableCompileSdkChecks=true :app:assembleDebug
