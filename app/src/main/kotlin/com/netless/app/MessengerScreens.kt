@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.vector.ImageVector
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.theme.*
@@ -24,7 +25,7 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 	MiuixTheme(controller) {
 		Scaffold(topBar = { TopAppBar(title = state.selectedConversation?.let { id -> state.conversations.firstOrNull { it.id == id }?.title } ?: tab.name) }, bottomBar = {
 			if (state.selectedConversation == null) NavigationBar {
-				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = MiuixIcons.Contacts, label = item.name) }
+				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = NavigationPlaceholder, label = item.name) }
 			}
 		}) { padding ->
 			Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
@@ -38,6 +39,8 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 		}
 	}
 }
+
+private val NavigationPlaceholder = ImageVector.Builder("navigation", 24.dp, 24.dp, 24f, 24f).build()
 
 @Composable private fun ChatListScreen(state: MessengerUiState, viewModel: MessengerViewModel) {
 		Text("Private messages over the mesh")
