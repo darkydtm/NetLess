@@ -40,7 +40,7 @@ fun NetlessApp(viewModel: ProfileViewModel, container: AppContainer) {
 	LaunchedEffect(container) {
 		container.runtimeController.startDiscovery()
 	}
-	PrototypeApp()
+	MessengerApp(messengerViewModel, viewModel, contacts)
 }
 
 @Composable
