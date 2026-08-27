@@ -4,7 +4,7 @@ kotlin = "2.4.10"
 compose-multiplatform = "1.12.0-rc01"
 compose-compiler = "2.4.10"
 compose-bom = "2024.12.01"
-activity-compose = "1.10.0"
+activity-compose = "1.11.0"
 lifecycle = "2.8.7"
 
 [plugins]
