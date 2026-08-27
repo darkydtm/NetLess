@@ -22,4 +22,5 @@ jobs:
           find "$HOME/.gradle/caches/modules-2/files-2.1/top.yukonga.miuix.kmp" -name '*.aar' -print0 | while IFS= read -r -d '' aar; do
             zip -d "$aar" 'META-INF/com/android/build/gradle/aar-metadata.properties' || true
           done
-      - run: ./gradlew :app:assembleDebug
+          find "$HOME/.gradle/caches" -path '*/transforms-*/*' -type f -name 'aar-metadata.properties' -delete
+      - run: ./gradlew --offline :app:assembleDebug
