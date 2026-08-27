@@ -15,5 +15,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: amyu/setup-android@09345fc2cbed5b3a92beea84d843a22eac6cc841
+        with:
+          sdk-version: '37.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew -Dandroid.experimental.disableCompileSdkChecks=true :app:assembleDebug
+      - run: ./gradlew :app:assembleDebug

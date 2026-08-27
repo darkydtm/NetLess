@@ -15,9 +15,9 @@ dependencies {
 	implementation("androidx.compose.ui:ui")
 	implementation("androidx.compose.ui:ui-tooling-preview")
  implementation("androidx.compose.material3:material3")
-	implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.2")
-	implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.2")
-	implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.2")
+	implementation("top.yukonga.miuix.kmp:miuix-ui-android:0.9.4-rc01")
+	implementation("top.yukonga.miuix.kmp:miuix-icons-android:0.9.4-rc01")
+	implementation("top.yukonga.miuix.kmp:miuix-preference-android:0.9.4-rc01")
 	implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:${libs.versions.lifecycle.get()}")
 	implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycle.get()}")
 	implementation("androidx.core:core-ktx:1.15.0")
@@ -27,7 +27,7 @@ dependencies {
 
 android {
 	namespace = "com.netless.app"
-	compileSdk = 35
+	compileSdk = 37
 
 	signingConfigs {
 		create("release") {
