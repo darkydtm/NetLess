@@ -27,7 +27,7 @@ private enum class Tab(val ru: String, val en: String, val item: NavigationItem)
 }
 
 private data class Peer(val id: String, val name: String, val message: String, val transport: String, val online: Boolean)
-private data class ChatMessage(val peerId: String, val text: String, val mine: Boolean)
+private data class PrototypeMessage(val peerId: String, val text: String, val mine: Boolean)
 
 private val peers = listOf(
 	Peer("alex", "Alex", "Встретимся у моста?", "Wi-Fi Direct", true),
@@ -42,7 +42,7 @@ fun PrototypeApp() {
 	var tab by remember { mutableStateOf(Tab.Chats) }
 	var selected by remember { mutableStateOf<String?>(null) }
 	var query by remember { mutableStateOf("") }
-	var messages by remember { mutableStateOf(listOf(ChatMessage("alex", "Привет! Я нашёл стабильный маршрут.", false))) }
+	var messages by remember { mutableStateOf(listOf(PrototypeMessage("alex", "Привет! Я нашёл стабильный маршрут.", false))) }
 	var russian by remember { mutableStateOf(true) }
 	var theme by remember { mutableStateOf(0) }
 	var relay by remember { mutableStateOf(true) }
@@ -66,7 +66,7 @@ fun PrototypeApp() {
 		) { padding ->
 			Box(Modifier.fillMaxSize().padding(padding)) {
 				when {
-					selected != null -> Conversation(selected!!, messages, russian, { text -> messages += ChatMessage(selected!!, text, true) }) { index -> messages = messages.filterIndexed { position, message -> !(message.peerId == selected && position == index) } }
+					selected != null -> Conversation(selected!!, messages, russian, { text -> messages += PrototypeMessage(selected!!, text, true) }) { index -> messages = messages.filterIndexed { position, message -> !(message.peerId == selected && position == index) } }
 					tab == Tab.Chats -> Chats(query, { query = it }) { selected = it }
 					tab == Tab.Profile -> Profile(russian)
 					else -> Settings(russian, { russian = it }, theme, { theme = it }, relay, { relay = it }, store, { store = it }, notifications, { notifications = it }, policy, { policy = it }, transport, { transport = it }, priority, { priority = it }, hops, { hops = it }, unlimited, { unlimited = it }, ttl, { ttl = it })
@@ -78,7 +78,7 @@ fun PrototypeApp() {
 
 @Composable private fun Chats(query: String, onQuery: (String) -> Unit, onOpen: (String) -> Unit) { Column(Modifier.fillMaxSize().padding(16.dp)) { Card { BasicTextField(query, onQuery, Modifier.fillMaxWidth().padding(16.dp), decorationBox = { inner -> if (query.isEmpty()) Text("Search") else inner() }) }; LazyColumn { items(peers.filter { it.name.contains(query, true) || it.message.contains(query, true) }) { peer -> ChatRow(peer, onOpen) } } } }
 @Composable private fun ChatRow(peer: Peer, onOpen: (String) -> Unit) { Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpen(peer.id) }.semantics { contentDescription = "Open ${peer.name} conversation" }) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text(peer.name.first().toString(), color = Color.White, modifier = Modifier.size(48.dp).background(Color(0xFF7561A8), CircleShape).padding(14.dp)); Column(Modifier.weight(1f)) { Text(peer.name); Text(peer.message); Text(if (peer.online) "Connected · ${peer.transport}" else "Waiting for delivery") }; Text("10:42") } } }
-@Composable private fun Conversation(id: String, messages: List<ChatMessage>, russian: Boolean, onSend: (String) -> Unit, onDelete: (Int) -> Unit) { var draft by remember { mutableStateOf("") }; var selectedIndex by remember { mutableStateOf<Int?>(null) }; Column(Modifier.fillMaxSize().padding(16.dp)) { Text(peers.first { it.id == id }.name, style = MiuixTheme.textStyles.title1); LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { items(messages.filter { it.peerId == id }) { message -> val index = messages.indexOf(message); Card(Modifier.fillMaxWidth().clickable { selectedIndex = index }) { Text(message.text, Modifier.padding(14.dp)) } } }; selectedIndex?.let { index -> Row { TextButton("${if (russian) "Удалить" else "Delete"}", { onDelete(index); selectedIndex = null }) } }; Row(verticalAlignment = Alignment.CenterVertically) { BasicTextField(draft, { draft = it }, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (draft.isEmpty()) Text(if (russian) "Сообщение" else "Message") else inner() }); IconButton({ if (draft.isNotBlank()) { onSend(draft); draft = "" } }) { Icon(MiuixIcons.Send, "Send") } } } }
+@Composable private fun Conversation(id: String, messages: List<PrototypeMessage>, russian: Boolean, onSend: (String) -> Unit, onDelete: (Int) -> Unit) { var draft by remember { mutableStateOf("") }; var selectedIndex by remember { mutableStateOf<Int?>(null) }; Column(Modifier.fillMaxSize().padding(16.dp)) { Text(peers.first { it.id == id }.name, style = MiuixTheme.textStyles.title1); LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { items(messages.filter { it.peerId == id }) { message -> val index = messages.indexOf(message); Card(Modifier.fillMaxWidth().clickable { selectedIndex = index }) { Text(message.text, Modifier.padding(14.dp)) } } }; selectedIndex?.let { index -> Row { TextButton("${if (russian) "Удалить" else "Delete"}", { onDelete(index); selectedIndex = null }) } }; Row(verticalAlignment = Alignment.CenterVertically) { BasicTextField(draft, { draft = it }, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (draft.isEmpty()) Text(if (russian) "Сообщение" else "Message") else inner() }); IconButton({ if (draft.isNotBlank()) { onSend(draft); draft = "" } }) { Icon(MiuixIcons.Send, "Send") } } } }
 @Composable private fun Profile(russian: Boolean) { Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(if (russian) "Ваш профиль" else "Your profile"); Text("Alex", style = MiuixTheme.textStyles.title1); Text(if (russian) "Ваш постоянный идентификатор" else "Your persistent identity"); Card { Text("profile-alex-01", Modifier.padding(16.dp)) } } }
 @Composable private fun Choice(title: String, items: List<String>, selected: Int, onSelected: (Int) -> Unit) { OverlayDropdownPreference(items = items, selectedIndex = selected, title = title, onSelectedIndexChange = onSelected) }
 @Composable private fun Toggle(title: String, value: Boolean, onValue: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, Modifier.weight(1f)); Switch(value, onValue) } }
