@@ -1,74 +1,98 @@
 package com.netless.app
 
-import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
-import androidx.compose.material3.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.netless.transport.TransportPolicy
-import com.netless.transport.TransportType
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.*
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.theme.*
+
+private enum class Tab(val ru: String, val en: String, val item: NavigationItem) {
+	Chats("Чаты", "Chats", NavigationItem("Chats", MiuixIcons.VerticalSplit)),
+	Profile("Профиль", "Profile", NavigationItem("Profile", MiuixIcons.Contacts)),
+	Settings("Настройки", "Settings", NavigationItem("Settings", MiuixIcons.Settings)),
+}
+
+private data class Peer(val id: String, val name: String, val message: String, val transport: String, val online: Boolean)
+private data class ChatMessage(val peerId: String, val text: String, val mine: Boolean)
+
+private val peers = listOf(
+	Peer("alex", "Alex", "Встретимся у моста?", "Wi-Fi Direct", true),
+	Peer("nina", "Nina", "Маршрут через relay готов", "Bluetooth relay", true),
+	Peer("team", "Team Mesh", "Проверим новый узел сегодня", "2 hops", false),
+	Peer("mika", "Mika", "Я доступен рядом", "Wi-Fi Aware", true),
+	Peer("sam", "Sam", "Профиль обновлён", "Bluetooth", true),
+)
 
 @Composable
-fun MessengerShell(viewModel: MessengerViewModel, profile: ProfileViewModel, contacts: List<com.netless.transport.DiscoveredNode>) {
-	val state by viewModel.uiState.collectAsState()
-	BoxWithConstraints(Modifier.fillMaxSize()) {
-		val wide = maxWidth >= 600.dp
-		if (!wide) Column(Modifier.fillMaxSize()) {
-			Box(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
-			NavigationBar {
-			MessengerTab.entries.forEach { tab ->
-				NavigationBarItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) })
+fun PrototypeApp() {
+	var tab by remember { mutableStateOf(Tab.Chats) }
+	var selected by remember { mutableStateOf<String?>(null) }
+	var query by remember { mutableStateOf("") }
+	var messages by remember { mutableStateOf(listOf(ChatMessage("alex", "Привет! Я нашёл стабильный маршрут.", false))) }
+	var russian by remember { mutableStateOf(true) }
+	var theme by remember { mutableStateOf(0) }
+	var relay by remember { mutableStateOf(true) }
+	var store by remember { mutableStateOf(true) }
+	var notifications by remember { mutableStateOf(true) }
+	var policy by remember { mutableStateOf(0) }
+	var transport by remember { mutableStateOf(0) }
+	var priority by remember { mutableStateOf(1) }
+	var hops by remember { mutableStateOf(2) }
+	var unlimited by remember { mutableStateOf(false) }
+	var ttl by remember { mutableStateOf(3) }
+	val controller = remember(theme) {
+		if (theme == 0) ThemeController(ColorSchemeMode.Light)
+		else ThemeController(ColorSchemeMode.Dark, darkColors = if (theme == 2) darkColorScheme(background = Color.Black, surface = Color.Black) else darkColorScheme())
+	}
+	MiuixTheme(controller) {
+		Scaffold(
+			topBar = { TopAppBar(title = selected?.let { peers.first { peer -> peer.id == it }.name } ?: when (tab) { Tab.Profile -> if (russian) "Профиль" else "Profile"; Tab.Settings -> if (russian) "Настройки" else "Settings"; else -> "NetlessGram" }), navigationIcon = { if (selected != null) IconButton({ selected = null }) { Icon(MiuixIcons.Back, "Back") } } },
+			floatingActionButton = { if (tab == Tab.Chats && selected == null) IconButton({ selected = peers.first().id }) { Icon(MiuixIcons.Add, "Новый чат") } },
+			bottomBar = { if (selected == null) NavigationBar { Tab.entries.forEach { item -> NavigationBarItem(tab == item, { tab = item }, icon = item.item.icon, label = if (russian) item.ru else item.en) } } },
+		) { padding ->
+			Box(Modifier.fillMaxSize().padding(padding)) {
+				when {
+					selected != null -> Conversation(selected!!, messages, russian, { text -> messages += ChatMessage(selected!!, text, true) }) { index -> messages = messages.filterIndexed { position, message -> !(message.peerId == selected && position == index) } }
+					tab == Tab.Chats -> Chats(query, { query = it }) { selected = it }
+					tab == Tab.Profile -> Profile(russian)
+					else -> Settings(russian, { russian = it }, theme, { theme = it }, relay, { relay = it }, store, { store = it }, notifications, { notifications = it }, policy, { policy = it }, transport, { transport = it }, priority, { priority = it }, hops, { hops = it }, unlimited, { unlimited = it }, ttl, { ttl = it })
+				}
 			}
-			}
-		} else Row(Modifier.fillMaxSize()) {
-			NavigationRail { MessengerTab.entries.forEach { tab -> NavigationRailItem(selected = state.currentTab == tab, onClick = { viewModel.selectTab(tab) }, icon = { Text(tab.name.first().toString()) }, label = { Text(tab.name) }) } }
-			Box(Modifier.weight(1f).fillMaxHeight().padding(16.dp)) { currentMessengerScreen(state, viewModel, profile, contacts) }
-			if (state.currentTab == MessengerTab.Chats) ConversationScreen(state, viewModel, Modifier.weight(1f).fillMaxHeight())
 		}
 	}
 }
 
-@Composable private fun currentMessengerScreen(state: MessengerUiState, viewModel: MessengerViewModel, profile: ProfileViewModel, contacts: List<com.netless.transport.DiscoveredNode>) {
-		when (state.currentTab) {
-			MessengerTab.Chats -> ChatListScreen(state, viewModel)
-			MessengerTab.Contacts -> ContactsScreen(contacts, viewModel)
-			MessengerTab.Settings -> SettingsScreen(profile, state, viewModel)
-		}
-}
-
-@Composable fun ChatListScreen(state: MessengerUiState, viewModel: MessengerViewModel) {
-	Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-		Text("Netless", style = MaterialTheme.typography.headlineMedium)
-		Text("Private messages, even without the internet", style = MaterialTheme.typography.bodyMedium)
-		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.conversations) { conversation -> ListItem(headlineContent = { Text(conversation.title) }, supportingContent = { Text(conversation.preview) }, modifier = Modifier.fillMaxWidth().clickable { viewModel.selectConversation(conversation.id) }.semantics { contentDescription = "Open ${conversation.title} conversation" }, leadingContent = { Text("N", style = MaterialTheme.typography.titleLarge) }); Spacer(Modifier.height(4.dp)) } }
-		if (state.routeDetails == null) ConversationScreen(state, viewModel)
+@Composable private fun Chats(query: String, onQuery: (String) -> Unit, onOpen: (String) -> Unit) { Column(Modifier.fillMaxSize().padding(16.dp)) { Card { BasicTextField(query, onQuery, Modifier.fillMaxWidth().padding(16.dp), decorationBox = { inner -> if (query.isEmpty()) Text("Search") else inner() }) }; LazyColumn { items(peers.filter { it.name.contains(query, true) || it.message.contains(query, true) }) { peer -> ChatRow(peer, onOpen) } } } }
+@Composable private fun ChatRow(peer: Peer, onOpen: (String) -> Unit) { Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpen(peer.id) }.semantics { contentDescription = "Open ${peer.name} conversation" }) { Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) { Text(peer.name.first().toString(), color = Color.White, modifier = Modifier.size(48.dp).background(Color(0xFF7561A8), CircleShape).padding(14.dp)); Column(Modifier.weight(1f)) { Text(peer.name); Text(peer.message); Text(if (peer.online) "Connected · ${peer.transport}" else "Waiting for delivery") }; Text("10:42") } } }
+@Composable private fun Conversation(id: String, messages: List<ChatMessage>, russian: Boolean, onSend: (String) -> Unit, onDelete: (Int) -> Unit) { var draft by remember { mutableStateOf("") }; var selectedIndex by remember { mutableStateOf<Int?>(null) }; Column(Modifier.fillMaxSize().padding(16.dp)) { Text(peers.first { it.id == id }.name, style = MiuixTheme.textStyles.title1); LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { items(messages.filter { it.peerId == id }) { message -> val index = messages.indexOf(message); Card(Modifier.fillMaxWidth().clickable { selectedIndex = index }) { Text(message.text, Modifier.padding(14.dp)) } } }; selectedIndex?.let { index -> Row { TextButton("${if (russian) "Удалить" else "Delete"}", { onDelete(index); selectedIndex = null }) } }; Row(verticalAlignment = Alignment.CenterVertically) { BasicTextField(draft, { draft = it }, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (draft.isEmpty()) Text(if (russian) "Сообщение" else "Message") else inner() }); IconButton({ if (draft.isNotBlank()) { onSend(draft); draft = "" } }) { Icon(MiuixIcons.Send, "Send") } } } }
+@Composable private fun Profile(russian: Boolean) { Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(if (russian) "Ваш профиль" else "Your profile"); Text("Alex", style = MiuixTheme.textStyles.title1); Text(if (russian) "Ваш постоянный идентификатор" else "Your persistent identity"); Card { Text("profile-alex-01", Modifier.padding(16.dp)) } } }
+@Composable private fun Choice(title: String, items: List<String>, selected: Int, onSelected: (Int) -> Unit) { OverlayDropdownPreference(items = items, selectedIndex = selected, title = title, onSelectedIndexChange = onSelected) }
+@Composable private fun Toggle(title: String, value: Boolean, onValue: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, Modifier.weight(1f)); Switch(value, onValue) } }
+@Composable private fun Settings(russian: Boolean, onRussian: (Boolean) -> Unit, theme: Int, onTheme: (Int) -> Unit, relay: Boolean, onRelay: (Boolean) -> Unit, store: Boolean, onStore: (Boolean) -> Unit, notifications: Boolean, onNotifications: (Boolean) -> Unit, policy: Int, onPolicy: (Int) -> Unit, transport: Int, onTransport: (Int) -> Unit, priority: Int, onPriority: (Int) -> Unit, hops: Int, onHops: (Int) -> Unit, unlimited: Boolean, onUnlimited: (Boolean) -> Unit, ttl: Int, onTtl: (Int) -> Unit) {
+	val pick: @Composable (String, List<String>, Int, (Int) -> Unit) -> Unit = { title, values, selected, callback -> Card { Choice(title, values, selected, callback) } }
+	LazyColumn(Modifier.fillMaxSize()) {
+		item { Column(Modifier.padding(20.dp)) { Text(if (russian) "Настройки" else "Settings"); Text("Alex"); Text("Profile ID: profile-alex-01") } }
+		item { SmallTitle(if (russian) "Общие" else "General") }
+		item { pick(if (russian) "Язык приложения" else "App language", listOf("Русский", "English"), if (russian) 0 else 1) { onRussian(it == 0) } }
+		item { pick(if (russian) "Тема" else "Theme", listOf("Light", "Dark", "Black"), theme, onTheme) }
+		item { SmallTitle(if (russian) "Как доставлять сообщения" else "Message delivery") }
+		item { pick("Connection", listOf("Automatic", "Bluetooth", "Wi-Fi Direct", "Wi-Fi Aware", "Local Hotspot"), transport, onTransport) }
+		item { pick("Delivery priority", listOf("Speed", "Balanced", "Coverage"), priority, onPriority) }
+		item { Card { Toggle("Relay", relay, onRelay); Toggle("Store and forward", store, onStore) } }
+		item { Card { Toggle("Notifications", notifications, onNotifications) } }
 	}
 }
-
-@Composable fun ConversationScreen(state: MessengerUiState, viewModel: MessengerViewModel, modifier: Modifier = Modifier) {
-	Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-		Text(state.conversations.firstOrNull { it.id == state.selectedConversation }?.title ?: "Select a contact", style = MaterialTheme.typography.titleLarge)
-		LazyColumn(Modifier.weight(1f, fill = false)) { items(state.messages) { message -> Text(message.body); Text(state.deliveryByMessageId[message.id] ?: message.deliveryState.name, style = MaterialTheme.typography.labelMedium) } }
-		state.deliveryLabel?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
-		Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f), label = { Text("Message") }); Button({ viewModel.send() }, enabled = state.draft.isNotBlank(), modifier = Modifier.semantics { contentDescription = "Send message" }) { Text("Send") } }
-	}
-}
-
-@Composable fun ContactsScreen(contacts: List<com.netless.transport.DiscoveredNode>, viewModel: MessengerViewModel) {
-	var value by remember { mutableStateOf("") }
-	Column { Text("Contacts", style = MaterialTheme.typography.headlineMedium); OutlinedTextField(value, { value = it }, label = { Text("profileId | displayName | nodeId | endpoint | identityKey") }); Button({ viewModel.addContactText(value); value = "" }, enabled = value.contains('|')) { Text("Add contact") }; viewModel.uiState.collectAsState().value.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; if (contacts.isEmpty()) Text("No nearby contacts yet"); contacts.forEach { Text(it.endpoint.address, Modifier.padding(vertical = 8.dp)) } }
-}
-
-@Composable fun SettingsScreen(profile: ProfileViewModel, state: MessengerUiState, viewModel: MessengerViewModel) { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Settings", style = MaterialTheme.typography.headlineMedium); Text("Network", style = MaterialTheme.typography.titleMedium); NetworkSettingsScreen(state, viewModel); Text("Profile", style = MaterialTheme.typography.titleMedium); ProfileFields(profile) } }
-
-@Composable fun ProfileFields(viewModel: ProfileViewModel) { val state by viewModel.uiState.collectAsState(); when { state.loading -> CircularProgressIndicator(); else -> { OutlinedTextField(state.name, viewModel::nameChanged, label = { Text("Name") }); OutlinedTextField(state.bio, viewModel::bioChanged, label = { Text("Bio") }); state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; Button(viewModel::save, enabled = !state.saving) { Text(if (state.saving) "Saving..." else "Save profile") } } } }
-
-@Composable fun NetworkSettingsScreen(state: MessengerUiState, viewModel: MessengerViewModel) { Text("Automatic routing keeps the technical details out of your chats."); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button({ viewModel.setPolicy(TransportPolicy.Automatic()) }) { Text("Automatic") }; Button({ viewModel.setPolicy(TransportPolicy.Strict(TransportType.Bluetooth)) }) { Text("Strict") } }; if (state.strictWarningVisible) AlertDialog(onDismissRequest = viewModel::dismissStrictWarning, title = { Text("Strict routing warning") }, text = { Text("Messages will use Bluetooth only and may not arrive.") }, confirmButton = { TextButton(viewModel::confirmStrictMode) { Text("Use strict mode") } }, dismissButton = { TextButton(viewModel::dismissStrictWarning) { Text("Cancel") } }); TextButton(viewModel::toggleExpertRoute, modifier = Modifier.semantics { contentDescription = "Show route details" }) { Text(if (state.routeDetails == null) "Show route details" else "Hide route details") }; state.routeDetails?.let { RouteDetailsSheet(it) } }
-
-@Composable fun RouteDetailsSheet(hops: List<String>) { Surface(tonalElevation = 3.dp, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Expert route", style = MaterialTheme.typography.titleMedium); hops.forEachIndexed { index, hop -> Text("${index + 1}. $hop") } } } }
