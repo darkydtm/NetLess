@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.*
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.*
 
 private enum class Tab(val ru: String, val en: String, val item: NavigationItem) {
@@ -95,18 +96,7 @@ fun PrototypeApp() {
 @Composable private fun Conversation(id: String, messages: List<PrototypeMessage>, russian: Boolean, onSend: (String) -> Unit, onDelete: (Int) -> Unit) { var draft by remember { mutableStateOf("") }; var selectedIndex by remember { mutableStateOf<Int?>(null) }; Column(Modifier.fillMaxSize().padding(16.dp)) { Text(peers.first { it.id == id }.name, style = MiuixTheme.textStyles.title1); LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) { items(messages.filter { it.peerId == id }) { message -> val index = messages.indexOf(message); Card(Modifier.fillMaxWidth().clickable { selectedIndex = index }) { Text(message.text, Modifier.padding(14.dp)) } } }; selectedIndex?.let { index -> Row { TextButton("${if (russian) "Удалить" else "Delete"}", { onDelete(index); selectedIndex = null }) } }; Row(verticalAlignment = Alignment.CenterVertically) { BasicTextField(draft, { draft = it }, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (draft.isEmpty()) Text(if (russian) "Сообщение" else "Message") else inner() }); IconButton({ if (draft.isNotBlank()) { onSend(draft); draft = "" } }) { Icon(MiuixIcons.Send, "Send") } } } }
 @Composable private fun Profile(russian: Boolean) { Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { Text(if (russian) "Ваш профиль" else "Your profile"); Text("Alex", style = MiuixTheme.textStyles.title1); Text(if (russian) "Ваш постоянный идентификатор" else "Your persistent identity"); Card { Text("profile-alex-01", Modifier.padding(16.dp)) } } }
 @Composable private fun Choice(title: String, items: List<String>, selected: Int, onSelected: (Int) -> Unit) {
-	var expanded by remember { mutableStateOf(false) }
-	Card(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
-		Column(Modifier.padding(16.dp)) {
-			Text(title)
-			Text(items[selected])
-			if (expanded) {
-				items.forEachIndexed { index, item ->
-					Text(item, Modifier.fillMaxWidth().clickable { onSelected(index); expanded = false }.padding(vertical = 12.dp))
-				}
-			}
-		}
-	}
+	OverlayDropdownPreference(items = items, selectedIndex = selected, title = title, onSelectedIndexChange = onSelected)
 }
 @Composable private fun Toggle(title: String, value: Boolean, onValue: (Boolean) -> Unit) { Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Text(title, Modifier.weight(1f)); Switch(value, onValue) } }
 @Composable private fun Settings(russian: Boolean, onRussian: (Boolean) -> Unit, theme: Int, onTheme: (Int) -> Unit, relay: Boolean, onRelay: (Boolean) -> Unit, store: Boolean, onStore: (Boolean) -> Unit, notifications: Boolean, onNotifications: (Boolean) -> Unit, policy: Int, onPolicy: (Int) -> Unit, transport: Int, onTransport: (Int) -> Unit, priority: Int, onPriority: (Int) -> Unit, hops: Int, onHops: (Int) -> Unit, unlimited: Boolean, onUnlimited: (Boolean) -> Unit, ttl: Int, onTtl: (Int) -> Unit) {
