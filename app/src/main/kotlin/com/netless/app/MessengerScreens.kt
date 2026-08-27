@@ -24,7 +24,7 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 	MiuixTheme(controller) {
 		Scaffold(topBar = { TopAppBar(title = state.selectedConversation?.let { id -> state.conversations.firstOrNull { it.id == id }?.title } ?: tab.name) }, bottomBar = {
 			if (state.selectedConversation == null) NavigationBar {
-				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = null, label = item.name) }
+				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = MiuixIcons.Contacts, label = item.name) }
 			}
 		}) { padding ->
 			Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
