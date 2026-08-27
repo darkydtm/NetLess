@@ -24,7 +24,7 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 	MiuixTheme(controller) {
 		Scaffold(topBar = { TopAppBar(title = state.selectedConversation?.let { id -> state.conversations.firstOrNull { it.id == id }?.title } ?: tab.name) }, bottomBar = {
 			if (state.selectedConversation == null) NavigationBar {
-				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = { Icon(MiuixIcons.Settings, item.name) }, label = { Text(item.name) }) }
+				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = MiuixIcons.More, label = item.name) }
 			}
 		}) { padding ->
 			Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
@@ -47,7 +47,7 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 }
 
 @Composable private fun ConversationScreen(state: MessengerUiState, viewModel: MessengerViewModel) {
-		LazyColumn(Modifier.weight(1f)) { items(state.messages) { message -> Column(Modifier.padding(vertical = 6.dp)) { Text(message.body); Text(state.deliveryByMessageId[message.id] ?: message.deliveryState.name) } } }
+		Column(Modifier.weight(1f)) { LazyColumn { items(state.messages) { message -> Column(Modifier.padding(vertical = 6.dp)) { Text(message.body); Text(state.deliveryByMessageId[message.id] ?: message.deliveryState.name) } } } }
 		Row { BasicTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (state.draft.isEmpty()) Text("Message") else inner() }); Button(onClick = viewModel::send, enabled = state.draft.isNotBlank()) { Text("Send") } }
 }
 
