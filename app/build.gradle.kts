@@ -27,7 +27,7 @@ dependencies {
 
 android {
 	namespace = "com.netless.app"
-	compileSdk = 35
+	compileSdk = 37
 
 	signingConfigs {
 		create("release") {
