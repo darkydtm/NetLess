@@ -23,4 +23,4 @@ jobs:
             zip -d "$aar" 'META-INF/com/android/build/gradle/aar-metadata.properties' || true
           done
           find "$HOME/.gradle/caches" -path '*/transforms-*/*' -type f -name 'aar-metadata.properties' -delete
-      - run: ./gradlew --offline :app:assembleDebug
+      - run: ./gradlew :app:assembleDebug
