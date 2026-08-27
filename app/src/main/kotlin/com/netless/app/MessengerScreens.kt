@@ -24,7 +24,7 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 	MiuixTheme(controller) {
 		Scaffold(topBar = { TopAppBar(title = state.selectedConversation?.let { id -> state.conversations.firstOrNull { it.id == id }?.title } ?: tab.name) }, bottomBar = {
 			if (state.selectedConversation == null) NavigationBar {
-				MessengerTab.entries.forEach { item -> NavigationBarItem(tab == item, { tab = item; viewModel.selectTab(item) }, icon = MiuixIcons.Settings, label = item.name) }
+				MessengerTab.entries.forEach { item -> NavigationBarItem(selected = tab == item, onClick = { tab = item; viewModel.selectTab(item) }, icon = { Icon(MiuixIcons.Settings, item.name) }, label = { Text(item.name) }) }
 			}
 		}) { padding ->
 			Column(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
@@ -48,22 +48,22 @@ fun MessengerApp(viewModel: MessengerViewModel, profile: ProfileViewModel, conta
 
 @Composable private fun ConversationScreen(state: MessengerUiState, viewModel: MessengerViewModel) {
 		LazyColumn(Modifier.weight(1f)) { items(state.messages) { message -> Column(Modifier.padding(vertical = 6.dp)) { Text(message.body); Text(state.deliveryByMessageId[message.id] ?: message.deliveryState.name) } } }
-		Row { BasicTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (state.draft.isEmpty()) Text("Message") else inner() }); Button("Send", { viewModel.send() }, enabled = state.draft.isNotBlank()) }
+		Row { BasicTextField(state.draft, viewModel::draftChanged, Modifier.weight(1f).padding(12.dp), decorationBox = { inner -> if (state.draft.isEmpty()) Text("Message") else inner() }); Button(onClick = viewModel::send, enabled = state.draft.isNotBlank()) { Text("Send") } }
 }
 
 @Composable private fun ContactsScreen(contacts: List<com.netless.transport.DiscoveredNode>, draft: String, onDraft: (String) -> Unit, viewModel: MessengerViewModel) {
 	BasicTextField(draft, onDraft, Modifier.fillMaxWidth().padding(12.dp), decorationBox = { inner -> if (draft.isEmpty()) Text("profileId | displayName | nodeId | endpoint | identityKey") else inner() })
-	Button("Add contact", { viewModel.addContactText(draft); onDraft("") }, enabled = draft.contains('|'))
+	Button(onClick = { viewModel.addContactText(draft); onDraft("") }, enabled = draft.contains('|')) { Text("Add contact") }
 	if (contacts.isEmpty()) Text("No nearby contacts yet") else contacts.forEach { Text(it.endpoint.address) }
 }
 
 @Composable private fun SettingsScreen(profile: ProfileViewModel, state: MessengerUiState, viewModel: MessengerViewModel) {
 	val profileState by profile.uiState.collectAsState()
 	Text("Network", style = MiuixTheme.textStyles.title1)
-	Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button("Automatic", { viewModel.setPolicy(com.netless.transport.TransportPolicy.Automatic()) }); Button("Bluetooth only", { viewModel.setPolicy(com.netless.transport.TransportPolicy.Strict(com.netless.transport.TransportType.Bluetooth)) }) }
+	Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = { viewModel.setPolicy(com.netless.transport.TransportPolicy.Automatic()) }) { Text("Automatic") }; Button(onClick = { viewModel.setPolicy(com.netless.transport.TransportPolicy.Strict(com.netless.transport.TransportType.Bluetooth)) }) { Text("Bluetooth only") } }
 	Text("Profile", style = MiuixTheme.textStyles.title1)
 	BasicTextField(profileState.name, profile::nameChanged, Modifier.fillMaxWidth().padding(12.dp))
 	BasicTextField(profileState.bio, profile::bioChanged, Modifier.fillMaxWidth().padding(12.dp))
-	Button("Save profile", profile::save, enabled = !profileState.saving)
+	Button(onClick = profile::save, enabled = !profileState.saving) { Text("Save profile") }
 	state.deliveryLabel?.let { Text(it) }
 }
