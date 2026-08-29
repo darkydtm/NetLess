@@ -9,5 +9,7 @@ android {
 
 dependencies {
 	api(project(":core:common"))
+	api(project(":domain:identity"))
+	api(project(":core:crypto"))
 	testImplementation(kotlin("test"))
 }

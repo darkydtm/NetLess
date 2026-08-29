@@ -17,6 +17,10 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import java.util.Base64
 import com.netless.crypto.PublicKey
+import com.netless.crypto.Signature
+import com.netless.common.ProfileId
+import com.netless.identity.Profile
+import com.netless.protocol.ContactCodec
 
 internal object IdentityKeyCodec {
 	fun canonicalize(value: String): String? = runCatching {
@@ -36,7 +40,7 @@ interface MessageSender {
 	suspend fun send(message: ChatMessage, payload: ConversationMessagePayload, policy: SendPolicy): DeliveryState
 }
 
-class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val contactStore: ContactStore, private val localProfileId: String) {
+class ConversationRepository(private val store: DurableEncryptedContentStore, private val sender: MessageSender, private val contentCipher: ConversationContentCipher, private val contactStore: ContactStore, private val localProfileId: String, private val signProfile: (Profile) -> Profile = { error("profile signing is unavailable") }) {
 	init { require(localProfileId.isNotBlank()) }
 	private val messages = LinkedHashMap<String, ChatMessage>()
 	private val state = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -54,10 +58,12 @@ class ConversationRepository(private val store: DurableEncryptedContentStore, pr
 	fun contacts() = contactStore.contacts.value.mapNotNull { node -> node.endpoint.metadata["profileId"]?.let { profile -> Contact(profile, node.endpoint.metadata["displayName"] ?: profile, node.nodeId.value, node.endpoint.address, node.endpoint.metadata["identityKey"].orEmpty()) } }
 	fun addContact(profileId: String, displayName: String, nodeId: String, endpoint: String, identityKey: String) = synchronized(lock) {
 		require(listOf(profileId, displayName, nodeId, endpoint, identityKey).all { it.isNotBlank() }) { "profileId, displayName, nodeId, endpoint, and identityKey are required" }
-		val canonicalIdentityKey = IdentityKeyCodec.canonicalize(identityKey)
-		require(canonicalIdentityKey != null) { "identityKey must be a valid Base64-encoded public key" }
-		val contact = Contact(profileId, displayName, nodeId, endpoint, canonicalIdentityKey!!)
-		contactStore.upsert(com.netless.common.ProfileId(profileId), displayName, com.netless.common.NodeId(nodeId), com.netless.transport.TransportEndpoint(com.netless.common.NodeId(nodeId), endpoint, mapOf("sessionId" to endpoint)), canonicalIdentityKey!!)
+		val key = runCatching { PublicKey(Base64.getDecoder().decode(identityKey)) }.getOrElse { throw IllegalArgumentException("identityKey must be a valid Base64-encoded public key", it) }
+		val derivedId = ProfileId(java.security.MessageDigest.getInstance("SHA-256").digest(key.encoded).joinToString("") { "%02x".format(it) })
+		require(profileId == derivedId.value) { "profileId does not match identityKey" }
+		val unsigned = Profile(derivedId, key, displayName, "", 0, Signature(byteArrayOf(0)))
+		val contactNode = com.netless.common.NodeId(nodeId)
+		contactStore.import(signProfile(unsigned), contactNode, com.netless.transport.TransportEndpoint(contactNode, endpoint, mapOf("sessionId" to endpoint)))
 		publish()
 	}
 	fun markRead(conversationId: String) = synchronized(lock) { messages.values.filter { it.conversationId == conversationId && !it.read }.forEach { save(it.copy(read = true)) } }

@@ -11,6 +11,7 @@ import com.netless.content.DurableEncryptedContentStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import com.netless.transport.DiscoveryAdvertisement
 import com.netless.transport.DiscoveryCapability
 import com.netless.transport.TransportType
@@ -46,7 +47,7 @@ class AppContainer(application: Application) {
 		javax.crypto.spec.SecretKeySpec(databaseKeyStore.unprotect(wrapped), "AES")
 	}
 	val contentStore = DurableEncryptedContentStore(java.io.File(application.filesDir, "content.db"), AesContentCipher(storageKey))
-	val contacts = ContactStore(contentStore)
+	val contacts = ContactStore(contentStore) { key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }
 	private val conversationKeys = ConversationKeyRegistry({ key, data, signature -> kotlinx.coroutines.runBlocking { identityRepository.verify(key, data, signature) } }, contentStore)
 	private val contentCipher = ConversationContentCipher(conversationKeys)
 	lateinit var conversations: ConversationRepository
@@ -85,7 +86,7 @@ class AppContainer(application: Application) {
 				val selected = (policy as? SendPolicy.Network)?.policy ?: TransportPolicy.Automatic()
 				return meshRuntime.send(envelope, destination, selected).state
 			}
-	}, contentCipher = contentCipher, contactStore = contacts, localProfileId = localIdentity.profileId.value)
+	}, contentCipher = contentCipher, contactStore = contacts, localProfileId = localIdentity.profileId.value, signProfile = { profile -> profile.copy(signature = kotlinx.coroutines.runBlocking { identityRepository.sign(profile.signedPayload()) }) })
 	}
 	val peerMessages = PeerMessageRuntime({ bytes, ingress -> meshRuntime.receive(bytes, ingress) }, wifiDirect, wifiDirectDiscovery as WifiDirectDiscoveryTransport, localIdentity.publicKey,
 		{ data -> identityRepository.sign(data) }, { key, data, signature -> identityRepository.verify(key, data, signature) },
@@ -100,6 +101,7 @@ class AppContainer(application: Application) {
 		peerMessages,
 		meshRuntime,
 		{ port ->
+			val profile = runCatching { kotlinx.coroutines.runBlocking { identityRepository.observeProfile().first() } }.getOrNull() ?: return@RuntimeController null
 			val identity = runCatching { kotlinx.coroutines.runBlocking { identityRepository.getOrCreateIdentity() } }.getOrNull() ?: return@RuntimeController null
 			DiscoveryAdvertisement(
 				identity.profileId.value,
@@ -107,7 +109,7 @@ class AppContainer(application: Application) {
 				UUID.randomUUID().toString(),
 				setOf(DiscoveryCapability.Relay, DiscoveryCapability.AcceptIncoming),
 				setOf(TransportType.WifiDirect),
-				mapOf("port" to port.toString(), "identityKey" to java.util.Base64.getEncoder().encodeToString(identity.publicKey.encoded)),
+				mapOf("port" to port.toString(), "profile" to com.netless.protocol.ContactCodec.encode(profile), "identityKey" to java.util.Base64.getEncoder().encodeToString(identity.publicKey.encoded)),
 			)
 		},
 	)

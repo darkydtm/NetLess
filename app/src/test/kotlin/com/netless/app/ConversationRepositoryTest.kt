@@ -23,7 +23,7 @@ class ConversationRepositoryTest {
 		val file = File.createTempFile("conversation", ".db").also { it.delete() }
 		val store = DurableEncryptedContentStore(file, PlainCipher)
 		val first = repository(store)
-		first.addContact("profile", "Alex", "node", "endpoint", encodedPublicKey())
+        first.addContact(validProfileId(), "Alex", "node", "endpoint", encodedPublicKey())
 		first.send("conversation", "hello", SendPolicy.Automatic).first()
 
 		val restored = repository(DurableEncryptedContentStore(file, PlainCipher))
@@ -34,8 +34,9 @@ class ConversationRepositoryTest {
 	@Test
 	fun `contact identity does not depend on endpoint`() = runTest {
 		val repository = repository(DurableEncryptedContentStore(File.createTempFile("conversation", ".db"), PlainCipher))
-		repository.addContact("profile", "Alex", "node", "endpoint", encodedPublicKey())
-		assertEquals("profile", repository.contacts().single().profileId)
+        val profileId = validProfileId()
+        repository.addContact(profileId, "Alex", "node", "endpoint", encodedPublicKey())
+        assertEquals(profileId, repository.contacts().single().profileId)
 	}
 
 	@Test
@@ -57,7 +58,9 @@ class ConversationRepositoryTest {
 	}
 }
 
-private fun encodedPublicKey(): String = Base64.getEncoder().encodeToString(KeyPairGenerator.getInstance("EC").generateKeyPair().public.encoded)
+private val testPublicKey = Base64.getEncoder().encodeToString(KeyPairGenerator.getInstance("EC").generateKeyPair().public.encoded)
+private fun encodedPublicKey(): String = testPublicKey
+private fun validProfileId(): String = com.netless.common.ProfileId(java.security.MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(testPublicKey)).joinToString("") { "%02x".format(it) }).value
 
 private object PlainCipher : ContentCipher {
 	override fun encrypt(content: ByteArray) = content
@@ -70,5 +73,5 @@ private class FakeSender : MessageSender {
 
 private fun repository(store: DurableEncryptedContentStore): ConversationRepository {
 	val keys = ConversationKeyRegistry({ _, _, _ -> true }, store).also { it.register("conversation", KeyGenerator.getInstance("AES").apply { init(128) }.generateKey()) }
-	return ConversationRepository(store, FakeSender(), ConversationContentCipher(keys), ContactStore(store), "local")
+    return ConversationRepository(store, FakeSender(), ConversationContentCipher(keys), ContactStore(store) { _, _, _ -> true }, "local") { it.copy(signature = com.netless.crypto.Signature(byteArrayOf(1))) }
 }

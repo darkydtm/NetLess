@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.channels.awaitClose
 
 object BleAdvertisementCodec {
+	const val MAX_PAYLOAD_BYTES = 8 * 1024
 	private const val VERSION = 1
 	private const val MAX_METADATA_ENTRIES = 32
 	private const val MAX_METADATA_FIELD_BYTES = 512
@@ -47,7 +48,7 @@ object BleAdvertisementCodec {
 			data.writeInt(advertisement.metadata.size)
 			advertisement.metadata.forEach { (key, value) -> data.writeUTF(key); data.writeUTF(value) }
 		}
-	}.toByteArray()
+	}.toByteArray().also { require(it.size <= MAX_PAYLOAD_BYTES) { "BLE advertisement payload exceeds 8192 bytes" } }
 
 	fun decode(bytes: ByteArray): DiscoveryAdvertisement = DataInputStream(ByteArrayInputStream(bytes)).use { data ->
 		require(bytes.size <= MAX_PAYLOAD_BYTES) { "Discovery advertisement is too large" }
@@ -72,47 +73,6 @@ object BleAdvertisementCodec {
 	}
 }
 
-class ContactStore(private val store: com.netless.content.DurableEncryptedContentStore? = null) {
-	private val contactsByNode = LinkedHashMap<NodeId, DiscoveredNode>()
-	private val _contacts = MutableStateFlow<List<DiscoveredNode>>(emptyList())
-	val contacts: StateFlow<List<DiscoveredNode>> = _contacts.asStateFlow()
-	init { store?.ids()?.filter { it.startsWith("discovered-contact:") }?.forEach { id -> store.get(id)?.let { runCatching { BleAdvertisementCodec.decode(it) }.getOrNull() }?.let { advertisement -> val nodeId = NodeId(advertisement.metadata["nodeId"] ?: return@let); val address = advertisement.metadata["endpointAddress"] ?: return@let; val endpoint = TransportEndpoint(nodeId, address, advertisement.metadata); upsert(DiscoveredNode(nodeId, endpoint, TransportCapabilities(true, true, 1, true, true))) } } }
-
-	@Synchronized
-	fun upsert(node: DiscoveredNode) {
-		node.endpoint.metadata["identityKey"]?.let { key ->
-			require(IdentityKeyCodec.canonicalize(key) != null) { "identityKey must be a valid Base64-encoded public key" }
-		}
-		contactsByNode[node.nodeId] = node
-		val metadata = node.endpoint.metadata + ("nodeId" to node.nodeId.value) + ("endpointAddress" to node.endpoint.address)
-		store?.put("discovered-contact:${node.nodeId.value}", BleAdvertisementCodec.encode(DiscoveryAdvertisement(node.nodeId.value, 1, metadata["sessionId"] ?: node.nodeId.value, emptySet(), emptySet(), metadata)))
-		_contacts.value = contactsByNode.values.toList()
-	}
-
-	fun upsert(profileId: com.netless.common.ProfileId, nodeId: NodeId, endpoint: TransportEndpoint, identityKey: String? = null) {
-		require(endpoint.nodeId == nodeId)
-		val canonicalIdentityKey = identityKey?.let { IdentityKeyCodec.canonicalize(it) }
-		require(identityKey == null || canonicalIdentityKey != null) { "identityKey must be a valid Base64-encoded public key" }
-		val metadata = endpoint.metadata.toMutableMap().apply {
-			put("profileId", profileId.value)
-			canonicalIdentityKey?.let { put("identityKey", it) }
-		}
-		upsert(DiscoveredNode(nodeId, TransportEndpoint(nodeId, endpoint.address, metadata), TransportCapabilities(true, true, 1, true, true)))
-	}
-
-	fun upsert(profileId: com.netless.common.ProfileId, displayName: String, nodeId: NodeId, endpoint: TransportEndpoint, identityKey: String) {
-		require(displayName.isNotBlank())
-		upsert(profileId, nodeId, TransportEndpoint(nodeId, endpoint.address, endpoint.metadata + ("displayName" to displayName)), identityKey)
-	}
-
-	fun contact(profileId: String): DiscoveredNode? = contactsByNode.values.firstOrNull { it.endpoint.metadata["profileId"] == profileId }
-
-	@Synchronized
-	fun remove(nodeId: NodeId) {
-		contactsByNode.remove(nodeId)
-		_contacts.value = contactsByNode.values.toList()
-	}
-}
 
 class AndroidBleDiscoveryTransport(context: Context) : com.netless.transport.DiscoveryTransport {
 	private val adapter: BluetoothAdapter? = context.getSystemService(BluetoothManager::class.java)?.adapter

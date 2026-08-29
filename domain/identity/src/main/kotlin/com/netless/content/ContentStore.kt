@@ -45,8 +45,14 @@ class DurableEncryptedContentStore(
 	@Synchronized
 	fun put(id: String, content: ByteArray) {
 		require(id.isNotBlank()) { "id must not be blank" }
+		val previous = records[id]
 		records[id] = cipher.encrypt(content)
-		persist()
+		try {
+			persist()
+		} catch (error: Throwable) {
+			if (previous == null) records.remove(id) else records[id] = previous
+			throw error
+		}
 	}
 
 	@Synchronized
