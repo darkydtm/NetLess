@@ -10,6 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 
 class MainActivity : ComponentActivity() {
 	private val permissionRequest = 100
@@ -27,11 +30,14 @@ class MainActivity : ComponentActivity() {
 			ContextCompat.startForegroundService(this, Intent(this, NetlessForegroundService::class.java))
 		}
 		setContent {
-			PredictiveBackHandler { progress ->
-				progress.collect { }
-				finish()
+			val navigationEventDispatcherOwner = rememberNavigationEventDispatcherOwner(parent = null)
+			CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navigationEventDispatcherOwner) {
+				PredictiveBackHandler { progress ->
+					progress.collect { }
+					finish()
+				}
+				NetlessApp(viewModel, container)
 			}
-			NetlessApp(viewModel, container)
 		}
 		val missing = requiredPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 		if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())

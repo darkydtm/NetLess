@@ -11,6 +11,7 @@ dependencies {
 	implementation(project(":core:database"))
 	implementation(platform("androidx.compose:compose-bom:${libs.versions.compose.bom.get()}"))
 	implementation("androidx.activity:activity-compose:${libs.versions.activity.compose.get()}")
+	implementation("androidx.navigationevent:navigationevent-compose:1.2.0-alpha04")
 	implementation("androidx.compose.ui:ui")
 	implementation("androidx.compose.ui:ui-tooling-preview")
  implementation("androidx.compose.material3:material3")
