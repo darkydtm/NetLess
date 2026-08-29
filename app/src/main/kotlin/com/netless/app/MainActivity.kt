@@ -10,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.navigationevent.compose.NavigationEventDispatcherOwner
 
 class MainActivity : ComponentActivity() {
 	private val permissionRequest = 100
@@ -32,7 +31,7 @@ class MainActivity : ComponentActivity() {
 				progress.collect { }
 				finish()
 			}
-			NavigationEventDispatcherOwner { NetlessApp(viewModel, container) }
+			NetlessApp(viewModel, container)
 		}
 		val missing = requiredPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 		if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
