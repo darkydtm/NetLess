@@ -45,7 +45,7 @@ private enum class Tab(val label: Int, val item: NavigationItem) {
 
 @Composable
 fun PrototypeApp(profile: ProfileUiState, state: MessengerUiState, messenger: MessengerViewModel, profileViewModel: ProfileViewModel) {
-	val haptics = remember { HapticController(LocalContext.current) }
+	val haptics = remember(LocalContext.current) { HapticController(LocalContext.current) }
 	var tab by remember { mutableStateOf(Tab.Chats) }
 	var query by remember { mutableStateOf("") }
 	var theme by remember { mutableStateOf(0) }

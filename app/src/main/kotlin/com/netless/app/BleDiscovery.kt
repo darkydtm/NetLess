@@ -35,7 +35,6 @@ object BleAdvertisementCodec {
 	private const val VERSION = 1
 	private const val MAX_METADATA_ENTRIES = 32
 	private const val MAX_METADATA_FIELD_BYTES = 512
-	private const val MAX_PAYLOAD_BYTES = 8 * 1024
 
 	fun encode(advertisement: DiscoveryAdvertisement): ByteArray = ByteArrayOutputStream().also { output ->
 		DataOutputStream(output).use { data ->
