@@ -28,6 +28,6 @@ class MessengerViewModelTest {
 
 		viewModel.onDelivery(DeliveryState.Relaying)
 
-		assertEquals("Relayed", viewModel.uiState.value.deliveryLabel)
+		assertEquals(R.string.relayed, viewModel.uiState.value.deliveryLabel)
 	}
 }

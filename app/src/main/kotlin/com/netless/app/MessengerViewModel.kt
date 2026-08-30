@@ -22,12 +22,12 @@ data class MessengerUiState(
 	val conversations: List<ConversationUiState> = emptyList(),
 	val selectedConversation: String? = null,
 	val draft: String = "",
-	val deliveryLabel: String? = null,
+	val deliveryLabel: Int? = null,
 	val networkPolicy: TransportPolicy = TransportPolicy.Automatic(),
 	val strictWarningVisible: Boolean = false,
 	val routeDetails: List<String>? = null,
 	val messages: List<ChatMessage> = emptyList(),
-	val deliveryByMessageId: Map<String, String> = emptyMap(),
+	val deliveryByMessageId: Map<String, Int> = emptyMap(),
 	val error: String? = null,
 )
 
@@ -41,13 +41,15 @@ class MessengerViewModel(
 	init {
 		repository?.let { repo ->
 			viewModelScope.launch { repo.observeConversations().collect { summaries -> _uiState.update { state -> state.copy(conversations = summaries.map { ConversationUiState(it.conversationId, it.contactProfileId, it.lastMessagePreview) }, selectedConversation = state.selectedConversation ?: summaries.firstOrNull()?.conversationId) } } }
-			viewModelScope.launch { _uiState.flatMapLatest { repo.observeMessages(it.selectedConversation ?: "") }.collect { messages -> _uiState.update { it.copy(messages = messages, deliveryByMessageId = messages.associate { message -> message.id to message.deliveryState.name }) } } }
+			viewModelScope.launch { _uiState.flatMapLatest { repo.observeMessages(it.selectedConversation ?: "") }.collect { messages -> _uiState.update { it.copy(messages = messages, deliveryByMessageId = messages.associate { message -> message.id to message.deliveryState.resource }) } } }
 		}
 	}
 
 	fun selectTab(tab: MessengerTab) = _uiState.update { it.copy(currentTab = tab) }
 
 	fun selectConversation(id: String) { _uiState.update { it.copy(selectedConversation = id, currentTab = MessengerTab.Chats, messages = repository?.messages(id).orEmpty()) }; repository?.markRead(id) }
+
+	fun closeConversation() = _uiState.update { it.copy(selectedConversation = null, currentTab = MessengerTab.Chats, messages = emptyList()) }
 
 	fun draftChanged(text: String) = _uiState.update { it.copy(draft = text) }
 
@@ -70,7 +72,7 @@ class MessengerViewModel(
 		_uiState.update { state ->
 			state.copy(
 				draft = "",
-				deliveryLabel = "Sending",
+				deliveryLabel = R.string.sending,
 				conversations = state.conversations.map { item ->
 					if (item.id == conversation) item.copy(preview = text.trim()) else item
 				},
@@ -90,11 +92,14 @@ class MessengerViewModel(
 
 	fun toggleExpertRoute() = _uiState.update { it.copy(routeDetails = if (it.routeDetails == null) routeProvider() else null) }
 
-	fun onDelivery(state: DeliveryState) = _uiState.update { it.copy(deliveryLabel = when (state) {
-		DeliveryState.Queued -> "Queued"
-		DeliveryState.Relaying -> "Relayed"
-		DeliveryState.Delivered -> "Delivered"
-		DeliveryState.Expired -> "Expired"
-		DeliveryState.Failed -> "Failed - try again"
-	}) }
+	fun onDelivery(state: DeliveryState) = _uiState.update { it.copy(deliveryLabel = state.resource) }
 }
+
+private val DeliveryState.resource: Int
+	get() = when (this) {
+		DeliveryState.Queued -> R.string.queued
+		DeliveryState.Relaying -> R.string.relayed
+		DeliveryState.Delivered -> R.string.delivered
+		DeliveryState.Expired -> R.string.expired
+		DeliveryState.Failed -> R.string.failed_try_again
+	}

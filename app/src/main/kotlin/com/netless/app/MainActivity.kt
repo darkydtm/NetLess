@@ -8,7 +8,6 @@ import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
@@ -32,16 +31,13 @@ class MainActivity : ComponentActivity() {
 		setContent {
 			val navigationEventDispatcherOwner = rememberNavigationEventDispatcherOwner(parent = null)
 			CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navigationEventDispatcherOwner) {
-				PredictiveBackHandler { progress ->
-					progress.collect { }
-					finish()
-				}
 				NetlessApp(viewModel, container)
 			}
 		}
 		val missing = requiredPermissions().filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 		if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
 	}
+
 
 	private fun requiredPermissions(): List<String> = buildList {
 		if (Build.VERSION.SDK_INT >= 31) {

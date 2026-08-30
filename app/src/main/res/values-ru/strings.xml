@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="app_name">Netless</string>
+	<string name="tab_chats">Чаты</string><string name="tab_profile">Профиль</string><string name="tab_settings">Настройки</string>
+	<string name="back">Назад</string><string name="new_chat">Новый чат</string><string name="search">Поиск</string>
+	<string name="open_conversation">Открыть диалог с %1$s</string><string name="connected">Подключено - %1$s</string><string name="waiting_for_delivery">Ожидание доставки</string>
+	<string name="send">Отправить</string><string name="delete">Удалить</string><string name="message">Сообщение</string>
+	<string name="your_profile">Ваш профиль</string><string name="persistent_identity">Ваш постоянный идентификатор</string><string name="profile_id">Идентификатор профиля: %1$s</string>
+	<string name="general">Общие</string><string name="app_language">Язык приложения</string><string name="russian">Русский</string><string name="english">English</string>
+	<string name="theme">Тема</string><string name="light">Светлая</string><string name="dark">Тёмная</string><string name="black">Чёрная</string>
+	<string name="message_delivery">Доставка сообщений</string><string name="connection">Подключение</string><string name="automatic">Автоматически</string><string name="bluetooth">Bluetooth</string><string name="wifi_direct">Wi-Fi Direct</string><string name="wifi_aware">Wi-Fi Aware</string><string name="local_hotspot">Локальная точка доступа</string>
+	<string name="delivery_priority">Приоритет доставки</string><string name="speed">Скорость</string><string name="balanced">Баланс</string><string name="coverage">Охват</string><string name="relay">Ретрансляция</string><string name="store_and_forward">Хранение и пересылка</string><string name="notifications">Уведомления</string>
+	<string name="could_not_load_profile">Не удалось загрузить профиль</string><string name="name_required">Укажите имя</string><string name="could_not_save_profile">Не удалось сохранить профиль</string><string name="invalid_contact">Недействительный контакт</string><string name="invalid_contact_format">Используйте profileId | displayName | nodeId | endpoint | identityKey</string>
+	<string name="sending">Отправка</string><string name="queued">В очереди</string><string name="relayed">Передано через relay</string><string name="delivered">Доставлено</string><string name="expired">Срок истёк</string><string name="failed_try_again">Ошибка - попробуйте снова</string>
+	<string name="app_title">Netless</string><string name="open_back">Назад</string><string name="new_chat_accessibility">Новый чат</string><string name="nearby_contacts">Контакты рядом: %1$d</string><string name="messages">Сообщения</string>
+	<string name="haptic_feedback">Виброотклик</string><string name="haptic_off">Выключен</string><string name="haptic_low">Слабый</string><string name="haptic_medium">Средний</string><string name="haptic_high">Сильный</string>
+</resources>
